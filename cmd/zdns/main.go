@@ -137,7 +137,6 @@ func runListen() {
 
 func runAdvertise() {
 	fs := flag.NewFlagSet("advertise", flag.ExitOnError)
-	name := fs.String("name", getHostname(), "Name to broadcast")
 	fs.Parse(os.Args[2:])
 
 	storage, err := zdns.NewStorage()
