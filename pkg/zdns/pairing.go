@@ -58,22 +58,3 @@ func ParseInvite(inviteStr string) (*PairingInvite, error) {
 
 	return &invite, nil
 }
-
-// ParseInvite decodes a Base64 pairing string.
-func ParseInvite(inviteStr string) (*PairingInvite, error) {
-	data, err := base64.URLEncoding.DecodeString(inviteStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid base64: %v", err)
-	}
-
-	var invite PairingInvite
-	if err := json.Unmarshal(data, &invite); err != nil {
-		return nil, fmt.Errorf("invalid json: %v", err)
-	}
-
-	if len(invite.SharedSecret) != 32 {
-		return nil, fmt.Errorf("invalid secret length: expected 32, got %d", len(invite.SharedSecret))
-	}
-
-	return &invite, nil
-}

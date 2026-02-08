@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/nathfavour/zdns/pkg/sysinfo"
@@ -84,10 +86,15 @@ func runDaemon() {
 
 func runInvite() {
 	fs := flag.NewFlagSet("invite", flag.ExitOnError)
-	name := fs.String("name", getHostname(), "Human-readable name for this device")
 	fs.Parse(os.Args[2:])
 
-	_, code, err := zdns.CreateInvite(*name)
+	storage, _ := zdns.NewStorage()
+	id, err := getIdentity(storage)
+	if err != nil {
+		log.Fatalf("Failed to get identity: %v", err)
+	}
+
+	code, err := zdns.CreateInvite(id.Name, id.Public)
 	if err != nil {
 		log.Fatalf("Failed to create invite: %v", err)
 	}
@@ -118,6 +125,17 @@ func runJoin() {
 		log.Fatal(err)
 	}
 
+	id, err := getIdentity(storage)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// DH Handshake: My Private + Peer Public
+	sharedSecret, err := zdns.DeriveSharedSecret(id.Private, invite.PublicKey)
+	if err != nil {
+		log.Fatalf("DH Handshake failed: %v", err)
+	}
+
 	var expiresAt int64
 	if *days > 0 {
 		expiresAt = time.Now().AddDate(0, 0, *days).Unix()
@@ -128,7 +146,7 @@ func runJoin() {
 		Name:         invite.Name,
 		PublicKey:    invite.PublicKey,
 		ExpiresAt:    expiresAt,
-		SharedSecret: invite.SharedSecret,
+		SharedSecret: sharedSecret,
 	}
 	peers = append(peers, newPeer)
 

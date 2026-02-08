@@ -6,7 +6,8 @@ import (
 
 func TestPairing(t *testing.T) {
 	name := "TestDevice"
-	_, code, err := CreateInvite(name)
+	_, pub, _ := GenerateLongTermKey()
+	code, err := CreateInvite(name, pub)
 	if err != nil {
 		t.Fatalf("CreateInvite failed: %v", err)
 	}
@@ -18,9 +19,5 @@ func TestPairing(t *testing.T) {
 
 	if invite.Name != name {
 		t.Errorf("Expected name %s, got %s", name, invite.Name)
-	}
-
-	if len(invite.SharedSecret) != 32 {
-		t.Errorf("Expected 32 byte secret, got %d", len(invite.SharedSecret))
 	}
 }
