@@ -61,6 +61,9 @@ func runDaemon() {
 	go ipcServer.Start()
 	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
 
+	// Auto-register with Anyisland if available
+	zdns.RegisterWithAnyisland("1.0.0")
+
 	// Start DNS Bridge if requested
 	if *dnsAddr != "" {
 		dnsServer := dnsbridge.NewServer(*dnsAddr)

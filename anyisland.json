@@ -1,0 +1,17 @@
+{
+  "name": "zdns",
+  "version": "1.0.0",
+  "description": "Zero-Trust Discovery Service (zDNS) - A stealthy, encrypted local discovery protocol.",
+  "repository": "github.com/nathfavour/zdns",
+  "build": {
+    "steps": [
+      "make build"
+    ],
+    "bin": "build/zdns",
+    "toolchain": "go"
+  },
+  "runtime": {
+    "daemon": true,
+    "pulse": false
+  }
+}
