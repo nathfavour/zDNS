@@ -1,6 +1,7 @@
 # zDNS Build Artifacts
 build/
-zdns
+/zdns
+/build/zdns
 
 # Go binaries
 *.exe
