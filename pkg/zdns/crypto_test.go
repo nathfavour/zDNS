@@ -23,7 +23,7 @@ func TestGenerateServiceID(t *testing.T) {
 }
 
 func TestEncryptDecryptStateBlob(t *testing.T) {
-	key := []byte("key-must-be-exactly-32-bytes-long")
+	key := []byte("key-must-be-exactly-32-bytes-len")
 	blob := &StateBlob{
 		DeviceID:     [32]byte{1, 2, 3},
 		IP:           [16]byte{127, 0, 0, 1},
@@ -55,7 +55,7 @@ func TestEncryptDecryptStateBlob(t *testing.T) {
 }
 
 func TestDecryptTamperedPacket(t *testing.T) {
-	key := []byte("key-must-be-exactly-32-bytes-long")
+	key := []byte("key-must-be-exactly-32-bytes-len")
 	blob := &StateBlob{BatteryLevel: 50}
 
 	ciphertext, nonce, err := EncryptStateBlob(key, blob)
@@ -73,8 +73,8 @@ func TestDecryptTamperedPacket(t *testing.T) {
 }
 
 func TestDecryptWithWrongKey(t *testing.T) {
-	key1 := []byte("key1-must-be-exactly-32-bytes-len")
-	key2 := []byte("key2-must-be-exactly-32-bytes-len")
+	key1 := []byte("key1-must-be-exactly-32-byte-len")
+	key2 := []byte("key2-must-be-exactly-32-byte-len")
 	blob := &StateBlob{BatteryLevel: 50}
 
 	ciphertext, nonce, err := EncryptStateBlob(key1, blob)
