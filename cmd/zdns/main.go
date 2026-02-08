@@ -157,6 +157,8 @@ func runDaemon() {
 	fmt.Println("Starting zDNS Daemon...")
 	
 	storage, _ := zdns.NewStorage()
+	triggerEngine, _ = triggers.NewEngine(storage.ConfigDir)
+
 	store := zdns.NewPeerStore()
 	
 	// Pre-load store for IPC
@@ -288,6 +290,9 @@ func runListen() {
 		log.Fatal(err)
 	}
 
+	// Initialize triggers
+	triggerEngine, _ = triggers.NewEngine(storage.ConfigDir)
+
 	store := zdns.NewPeerStore()
 	peers, err := storage.LoadPeers()
 	if err != nil {
@@ -319,17 +324,30 @@ func runListen() {
 
 	fmt.Println("zDNS Listener Active. Waiting for trusted peers...")
 	err = listener.Listen(func(peer *zdns.Peer, blob *zdns.StateBlob) {
-		// Update live status for IPC
+		newState := blob.DeviceState.String()
+
 		livePeersMu.Lock()
+		oldStatus, exists := livePeers[peer.PublicKey]
+		
 		livePeers[peer.PublicKey] = ipc.PeerStatus{
 			Name:      peer.Name,
 			Battery:   blob.BatteryLevel,
-			State:     blob.DeviceState.String(),
+			State:     newState,
 			LastSeen:  time.Now().Unix(),
-			PublicKey: fmt.Sprintf("%x", peer.PublicKey[:4]), // Short fingerprint
+			PublicKey: fmt.Sprintf("%x", peer.PublicKey[:4]),
 			Tags:      blob.Tags,
 		}
 		livePeersMu.Unlock()
+
+		// Trigger Check: Only if state actually changed
+		if exists && oldStatus.State != newState {
+			env := map[string]string{
+				"ZDNS_PEER_NAME": peer.Name,
+				"ZDNS_PEER_BAT":  fmt.Sprintf("%d", blob.BatteryLevel),
+				"ZDNS_PEER_TAGS": blob.Tags,
+			}
+			triggerEngine.CheckAndFire(peer.Name, triggers.EventStateChange, newState, env)
+		}
 
 		fmt.Printf("[%s] %s - Battery: %d%% - %s\n",
 			time.Now().Format("15:04:05"), peer.Name, blob.BatteryLevel, blob.DeviceState)

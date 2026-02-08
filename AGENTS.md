@@ -64,7 +64,29 @@ zDNS adheres to modern OS conventions for data storage:
 - **Linux:** `~/.config/zdns/`
 - **macOS:** `~/Library/Application Support/zdns/`
 - **Windows:** `%AppData%\zdns\`
-- **Permissions:** All configuration files are created with `0600` (user-only) permissions to protect cryptographic secrets.
+
+### Configuration Files
+- `identity.json`: Local X25519 identity keys.
+- `peers.json`: Trusted peer metadata.
+- `secrets.json`: Encrypted shared secrets.
+- `triggers.json`: (Optional) Automation triggers for peer state changes.
+
+## Automation (Triggers)
+You can automate actions based on peer state changes by creating `triggers.json` in your config directory:
+
+```json
+{
+  "triggers": [
+    {
+      "peer_name": "MyPhone",
+      "event": "state_change",
+      "value": "LOCKED",
+      "command": "notify-send 'Phone Locked' 'Securing workstation...'"
+    }
+  ]
+}
+```
+Available environment variables in commands: `$ZDNS_PEER_NAME`, `$ZDNS_PEER_BAT`, `$ZDNS_PEER_TAGS`.
     - `advertiser/`: PoC for a device announcing its state.
     - `listener/`: PoC for a device discovering trusted peers.
 
