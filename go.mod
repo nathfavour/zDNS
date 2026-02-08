@@ -1,6 +1,6 @@
 module github.com/nathfavour/zdns
 
-go 1.25.5
+go 1.21
 
 require (
 	golang.org/x/crypto v0.47.0 // indirect
