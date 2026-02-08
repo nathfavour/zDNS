@@ -122,7 +122,7 @@ func ReceiveFile(addr string, peer *Peer, fileName string, saveDir string) error
 		outFile.Write(plaintext)
 	}
 
-	fmt.Printf("Received file: %s\n") outPath)
+	fmt.Printf("Received file: %s\n", outPath)
 	return nil
 }
 
