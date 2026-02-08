@@ -6,16 +6,17 @@ BINDIR ?= $(PREFIX)/bin
 all: build
 
 build:
-	go build -o zdns ./cmd/zdns
+	mkdir -p build
+	go build -o build/zdns ./cmd/zdns
 
 test:
 	go test -v ./pkg/...
 
 clean:
-	rm -f zdns
+	rm -rf build/
 
 install: build
-	install -Dm755 zdns $(DESTDIR)$(BINDIR)/zdns
+	install -Dm755 build/zdns $(DESTDIR)$(BINDIR)/zdns
 	install -Dm644 zdns.service $(DESTDIR)/usr/lib/systemd/user/zdns.service
 
 uninstall:
