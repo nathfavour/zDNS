@@ -139,23 +139,12 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, ta
 		Tags:         tags,
 	}
 
-	ciphertext, nonce, err := EncryptStateBlob(peer.SharedSecret, blob)
-	if err != nil {
-		return err
-	}
-
 	serviceID := GenerateServiceID(peer.SharedSecret, time.Now())
 
 	// Add random padding (0-31 bytes) to obscure packet length
 	var padding [32]byte
 	rand.Read(padding[:])
 	paddingLen := int(padding[0] % 32)
-
-	packet := make([]byte, 16+12+len(ciphertext)+paddingLen)
-	copy(packet[0:16], serviceID[:])
-	copy(packet[16:28], nonce[:])
-	copy(packet[28 : 28+len(ciphertext)], ciphertext)
-	copy(packet[28+len(ciphertext):], padding[:paddingLen])
 
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -178,7 +167,6 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, ta
 		}
 		blob.IP = ip
 
-		// Re-encrypt because the IP changed per interface
 		ciphertext, nonce, err := EncryptStateBlob(peer.SharedSecret, blob)
 		if err != nil {
 			continue
