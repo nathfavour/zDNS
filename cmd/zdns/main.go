@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +27,40 @@ type Identity struct {
 	Name    string   `json:"name"`
 	Private [32]byte `json:"priv"`
 	Public  [32]byte `json:"pub"`
+}
+
+func runStatus() {
+	storage, _ := zdns.NewStorage()
+	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
+
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		log.Fatalf("Is the daemon running? (Could not connect to %s: %v)", socketPath, err)
+	}
+	defer conn.Close()
+
+	req := ipc.Request{Command: "list_peers"}
+	json.NewEncoder(conn).Encode(req)
+
+	var resp ipc.Response
+	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		log.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if resp.Error != "" {
+		log.Fatalf("Daemon error: %s", resp.Error)
+	}
+
+	if len(resp.Peers) == 0 {
+		fmt.Println("No live peers discovered yet.")
+		return
+	}
+
+	fmt.Printf("%-15s %-10s %-10s %-10s\n", "NAME", "BATTERY", "STATE", "ID")
+	fmt.Println(strings.Repeat("-", 50))
+	for _, p := range resp.Peers {
+		fmt.Printf("%-15s %-10d %-10s %-10s\n", p.Name, p.Battery, p.State, p.PublicKey)
+	}
 }
 
 func getIdentity(storage *zdns.Storage) (*Identity, error) {
@@ -68,6 +104,8 @@ func main() {
 		runAdvertise()
 	case "daemon":
 		runDaemon()
+	case "status":
+		runStatus()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -82,10 +120,39 @@ func printUsage() {
 	fmt.Println("  zdns listen                        Listen for trusted peers")
 	fmt.Println("  zdns advertise                     Advertise current state")
 	fmt.Println("  zdns daemon                        Run both listener and advertiser")
+	fmt.Println("  zdns status                        Show status of discovered peers")
 }
 
 func runDaemon() {
 	fmt.Println("Starting zDNS Daemon...")
+	
+	storage, _ := zdns.NewStorage()
+	store := zdns.NewPeerStore()
+	
+	// Pre-load store for IPC
+	peers, _ := storage.LoadPeers()
+	for _, p := range peers {
+		store.AddPeer(p)
+	}
+
+	ipcServer, err := ipc.NewServer(store)
+	if err != nil {
+		log.Fatalf("IPC init failed: %v", err)
+	}
+
+	ipcServer.GetStatus = func() []ipc.PeerStatus {
+		livePeersMu.RLock()
+		defer livePeersMu.RUnlock()
+		status := make([]ipc.PeerStatus, 0, len(livePeers))
+		for _, p := range livePeers {
+			status = append(status, p)
+		}
+		return status
+	}
+
+	go ipcServer.Start()
+	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
+
 	// Run advertiser in background
 	go runAdvertise()
 	// Run listener in foreground
@@ -202,6 +269,17 @@ func runListen() {
 
 	fmt.Println("zDNS Listener Active. Waiting for trusted peers...")
 	err = listener.Listen(func(peer *zdns.Peer, blob *zdns.StateBlob) {
+		// Update live status for IPC
+		livePeersMu.Lock()
+		livePeers[peer.PublicKey] = ipc.PeerStatus{
+			Name:      peer.Name,
+			Battery:   blob.BatteryLevel,
+			State:     blob.DeviceState.String(),
+			LastSeen:  time.Now().Unix(),
+			PublicKey: fmt.Sprintf("%x", peer.PublicKey[:4]), // Short fingerprint
+		}
+		livePeersMu.Unlock()
+
 		fmt.Printf("[%s] %s - Battery: %d%% - %s\n",
 			time.Now().Format("15:04:05"), peer.Name, blob.BatteryLevel, blob.DeviceState)
 	})
