@@ -65,10 +65,10 @@ func runStatus() {
 		return
 	}
 
-	fmt.Printf("%-15s %-10s %-10s %-10s\n", "NAME", "BATTERY", "STATE", "ID")
-	fmt.Println(strings.Repeat("-", 50))
+	fmt.Printf("%-15s %-10s %-10s %-20s %-10s\n", "NAME", "BATTERY", "STATE", "SERVICES", "ID")
+	fmt.Println(strings.Repeat("-", 70))
 	for _, p := range resp.Peers {
-		fmt.Printf("%-15s %-10d %-10s %-10s\n", p.Name, p.Battery, p.State, p.PublicKey)
+		fmt.Printf("%-15s %-10d %-10s %-20s %-10s\n", p.Name, p.Battery, p.State, p.Tags, p.PublicKey)
 	}
 }
 
@@ -136,6 +136,10 @@ func printUsage() {
 }
 
 func runDaemon() {
+	fs := flag.NewFlagSet("daemon", flag.ExitOnError)
+	tags := fs.String("tags", "", "Comma-separated service tags")
+	fs.Parse(os.Args[2:])
+
 	fmt.Println("Starting zDNS Daemon...")
 	
 	storage, _ := zdns.NewStorage()
@@ -166,9 +170,29 @@ func runDaemon() {
 	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
 
 	// Run advertiser in background
-	go runAdvertise()
+	go runAdvertiseWithTags(*tags)
 	// Run listener in foreground
 	runListen()
+}
+
+func runAdvertiseWithTags(tags string) {
+	storage, _ := zdns.NewStorage()
+	peers, _ := storage.LoadPeers()
+	if len(peers) == 0 {
+		return
+	}
+
+	broadcaster, _ := zdns.NewBroadcaster()
+	info := sysinfo.NewInfoProvider()
+
+	for {
+		battery := info.GetBatteryLevel()
+		state := info.GetDeviceState()
+		for _, peer := range peers {
+			broadcaster.Broadcast(peer, state, battery, tags)
+		}
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func runInvite() {
@@ -303,6 +327,7 @@ func runListen() {
 
 func runAdvertise() {
 	fs := flag.NewFlagSet("advertise", flag.ExitOnError)
+	tags := fs.String("tags", "", "Comma-separated service tags")
 	fs.Parse(os.Args[2:])
 
 	storage, err := zdns.NewStorage()
@@ -329,7 +354,7 @@ func runAdvertise() {
 		state := info.GetDeviceState()
 
 		for _, peer := range peers {
-			err := broadcaster.Broadcast(peer, state, battery)
+			err := broadcaster.Broadcast(peer, state, battery, *tags)
 			if err != nil {
 				log.Printf("Broadcast error: %v", err)
 			}

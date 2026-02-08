@@ -29,6 +29,7 @@ func NewModel(socketPath string) model {
 		{Title: "Peer", Width: 15},
 		{Title: "Battery", Width: 10},
 		{Title: "State", Width: 10},
+		{Title: "Services", Width: 20},
 		{Title: "ID", Width: 10},
 		{Title: "Last Seen", Width: 15},
 	}
@@ -119,6 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p.Name,
 				batStr,
 				stateIcon + " " + p.State,
+				p.Tags,
 				p.PublicKey,
 				lastSeen,
 			})
