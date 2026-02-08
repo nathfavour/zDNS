@@ -11,6 +11,36 @@ import (
 	"github.com/nathfavour/zdns/pkg/zdns"
 )
 
+type Identity struct {
+	Name    string   `json:"name"`
+	Private [32]byte `json:"priv"`
+	Public  [32]byte `json:"pub"`
+}
+
+func getIdentity(storage *zdns.Storage) (*Identity, error) {
+	path := filepath.Join(storage.ConfigDir, "identity.json")
+	if _, err := os.Stat(path); err == nil {
+		data, _ := os.ReadFile(path)
+		var id Identity
+		json.Unmarshal(data, &id)
+		return &id, nil
+	}
+
+	// Create new identity
+	priv, pub, err := zdns.GenerateLongTermKey()
+	if err != nil {
+		return nil, err
+	}
+	id := &Identity{
+		Name:    getHostname(),
+		Private: priv,
+		Public:  pub,
+	}
+	data, _ := json.Marshal(id)
+	os.WriteFile(path, data, 0600)
+	return id, nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
