@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nathfavour/zdns/pkg/ipc"
+	"github.com/nathfavour/zdns/pkg/zdns"
 )
 
 func runStatus() {

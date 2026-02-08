@@ -50,6 +50,42 @@ zdns daemon
 systemctl --user enable --now zdns
 ```
 
+## Data Persistence
+zDNS adheres to modern OS conventions for data storage:
+- **Linux:** `~/.config/zdns/`
+- **macOS:** `~/Library/Application Support/zdns/`
+- **Windows:** `%AppData%\zdns\`
+
+### Configuration Files
+- `identity.json`: Local X25519 identity keys.
+- `peers.json`: Trusted peer metadata.
+- `secrets.json`: Encrypted shared secrets.
+- `triggers.json`: (Optional) Automation triggers for peer state changes.
+- `anyisland.json`: Anyisland distribution manifest.
+
+## Anyisland Integration
+zDNS is **Anyisland Aware**, supporting easy installation and OTA updates:
+- **Auto-Registration**: The daemon automatically registers with the Anyisland host on startup.
+- **Pulse Aware**: Supports OTA update notifications via Anyisland Pulse.
+- **Status Command**: Use `zdns managed` to check if your installation is being managed by Anyisland.
+
+## Automation (Triggers)
+You can automate actions based on peer state changes by creating `triggers.json` in your config directory:
+
+```json
+{
+  "triggers": [
+    {
+      "peer_name": "MyPhone",
+      "event": "state_change",
+      "value": "LOCKED",
+      "command": "notify-send 'Phone Locked' 'Securing workstation...'"
+    }
+  ]
+}
+```
+Available environment variables in commands: `$ZDNS_PEER_NAME`, `$ZDNS_PEER_BAT`, `$ZDNS_PEER_TAGS`.
+
 ## Development Conventions
 - **Minimal Dependencies:** Prefer Go standard library or `golang.org/x` packages. Avoid heavy frameworks.
 - **Security First:** Never log or broadcast plaintext identifiers.
@@ -69,11 +105,12 @@ systemctl --user enable --now zdns
     - `history.go`: Encrypted event logging.
     - `drop.go`: Encrypted file transfer logic.
     - `relay.go`: Remote signaling relay logic.
-- `pkg/sysinfo/`: Platform-specific system state providers (Battery, Lock status).
+    - `anyisland.go`: Anyisland auto-registration logic.
+    - `pulse.go`: Anyisland Pulse IPC logic.
+- `pkg/sysinfo/`: Platform-specific system state providers (Battery, Lock status, Health probing).
 - `pkg/ipc/`: Inter-Process Communication (Unix Domain Sockets).
 - `pkg/triggers/`: Automation engine for state-based actions.
 - `pkg/commands/`: Safe command executor for remote actions.
 - `pkg/tui/`: Bubble Tea stealth dashboard.
 - `pkg/dnsbridge/`: Local DNS resolver for .zdns domains.
 - `cmd/zdns/`: Main CLI entry point and modular subcommands.
-
