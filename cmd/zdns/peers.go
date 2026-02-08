@@ -23,16 +23,14 @@ func runPeers() {
 
 	switch os.Args[2] {
 	case "list":
-		fmt.Printf("%-20s %-20s %-20s
-", "NAME", "ID (Fingerprint)", "EXPIRES")
+		fmt.Printf("%-20s %-20s %-20s\n", "NAME", "ID (Fingerprint)", "EXPIRES")
 		fmt.Println(strings.Repeat("-", 60))
 		for _, p := range peers {
 			expires := "Never"
 			if p.ExpiresAt > 0 {
 				expires = time.Unix(p.ExpiresAt, 0).Format("2006-01-02")
 			}
-			fmt.Printf("%-20s %-20x %-20s
-", p.Name, p.PublicKey[:4], expires)
+			fmt.Printf("%-20s %-20x %-20s\n", p.Name, p.PublicKey[:4], expires)
 		}
 	case "rm":
 		if len(os.Args) < 4 {
@@ -43,8 +41,7 @@ func runPeers() {
 		for _, p := range peers {
 			if p.Name == target {
 				storage.Secrets.RemoveSecret(p.PublicKey)
-				fmt.Printf("Removed peer: %s
-", target)
+				fmt.Printf("Removed peer: %s\n", target)
 				continue
 			}
 			newPeers = append(newPeers, p)
@@ -58,8 +55,7 @@ func runPeers() {
 		for _, p := range peers {
 			if p.Name == oldName {
 				p.Name = newName
-				fmt.Printf("Renamed %s to %s
-", oldName, newName)
+				fmt.Printf("Renamed %s to %s\n", oldName, newName)
 			}
 		}
 		storage.SavePeers(peers)
@@ -88,8 +84,7 @@ func runPeers() {
 		}
 
 		broadcaster, _ := zdns.NewBroadcaster()
-		fmt.Printf("Requesting peer sync from %s...
-", targetName)
+		fmt.Printf("Requesting peer sync from %s...\n", targetName)
 		broadcaster.Broadcast(targetPeer, zdns.StateUnlocked, 100, "", "sync_req:"+port)
 
 		conn, err := l.Accept()
@@ -113,15 +108,13 @@ func runPeers() {
 			if !existingMap[sp.PublicKey] {
 				peers = append(peers, &sp)
 				added++
-				fmt.Printf("Discovered new peer: %s
-", sp.Name)
+				fmt.Printf("Discovered new peer: %s\n", sp.Name)
 			}
 		}
 		
 		if added > 0 {
 			storage.SavePeers(peers)
-			fmt.Printf("Sync complete. Added %d new potential peers.
-", added)
+			fmt.Printf("Sync complete. Added %d new potential peers.\n", added)
 		} else {
 			fmt.Println("Sync complete. No new peers found.")
 		}

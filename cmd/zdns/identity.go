@@ -57,10 +57,7 @@ func runIdentity() {
 		}
 		fmt.Println("--- zDNS Identity Backup ---")
 		fmt.Println("Your Paper-Key (Private Key):")
-		fmt.Printf("
-%s
-
-", zdns.ExportKey(id.Private))
+		fmt.Printf("\n%s\n\n", zdns.ExportKey(id.Private))
 		fmt.Println("KEEP THIS SECRET. Anyone with this key can impersonate your device.")
 		fmt.Println("-----------------------------")
 	case "import":

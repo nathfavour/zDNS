@@ -27,9 +27,7 @@ func runInvite() {
 
 	fmt.Println("--- zDNS Pairing Invite ---")
 	fmt.Println("Share this code with your peer:")
-	fmt.Println("
-" + code + "
-")
+	fmt.Println("\n" + code + "\n")
 	fmt.Println("---------------------------")
 }
 
@@ -81,6 +79,5 @@ func runJoin() {
 		log.Fatalf("Failed to save peer: %v", err)
 	}
 
-	fmt.Printf("Successfully joined peer: %s
-", invite.Name)
+	fmt.Printf("Successfully joined peer: %s\n", invite.Name)
 }

@@ -47,8 +47,7 @@ func runExec() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Sending command '%s' to %s...
-", targetCmd, targetPeer)
+	fmt.Printf("Sending command '%s' to %s...\n", targetCmd, targetPeer)
 	err = broadcaster.Broadcast(peer, zdns.StateUnlocked, 100, "", targetCmd)
 	if err != nil {
 		log.Fatalf("Failed to send command: %v", err)
@@ -110,8 +109,7 @@ func runConnect() {
 		addr = net.JoinHostPort(addr, port)
 	}
 
-	fmt.Printf("Connecting to %s on %s via %s...
-", targetPeer, addr, targetTag)
+	fmt.Printf("Connecting to %s on %s via %s...\n", targetPeer, addr, targetTag)
 
 	var cmd *exec.Cmd
 	switch targetTag {
@@ -125,8 +123,7 @@ func runConnect() {
 	case "http", "https":
 		cmd = exec.Command("xdg-open", fmt.Sprintf("%s://%s", targetTag, addr))
 	default:
-		fmt.Printf("No default handler for '%s'. Address: %s
-", targetTag, addr)
+		fmt.Printf("No default handler for '%s'. Address: %s\n", targetTag, addr)
 		return
 	}
 
@@ -158,8 +155,7 @@ func runProxy() {
 	if err != nil {
 		log.Fatalf("Failed to listen on localhost:%s: %v", localPort, err)
 	}
-	fmt.Printf("Proxying localhost:%s -> %s (%s)...
-", localPort, targetPeer, remoteTarget)
+	fmt.Printf("Proxying localhost:%s -> %s (%s)...\n", localPort, targetPeer, remoteTarget)
 
 	for {
 		clientConn, err := l.Accept()

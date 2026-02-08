@@ -44,8 +44,7 @@ func runSend() {
 	broadcaster, _ := zdns.NewBroadcaster()
 	
 	dropCmd := fmt.Sprintf("drop:%s:%s", port, fileName)
-	fmt.Printf("Signaling %s to receive '%s' on port %s...
-", targetName, fileName, port)
+	fmt.Printf("Signaling %s to receive '%s' on port %s...\n") targetName, fileName, port)
 	
 	err = broadcaster.Broadcast(targetPeer, zdns.StateUnlocked, 100, "", dropCmd)
 	if err != nil {

@@ -45,7 +45,6 @@ func runRelayServer() {
 		json.NewEncoder(w).Encode(c)
 	})
 
-	fmt.Printf("zDNS Signaling Relay starting on :%s...
-", *port)
+	fmt.Printf("zDNS Signaling Relay starting on :%s...\n", *port)
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }

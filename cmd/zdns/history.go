@@ -26,12 +26,10 @@ func runHistory() {
 		return
 	}
 
-	fmt.Printf("%-20s %-15s %-10s %-20s
-", "TIME", "PEER", "TYPE", "DATA")
+	fmt.Printf("%-20s %-15s %-10s %-20s\n", "TIME", "PEER", "TYPE", "DATA")
 	fmt.Println(strings.Repeat("-", 70))
 	for _, e := range events {
 		t := time.Unix(e.Timestamp, 0).Format("2006-01-02 15:04:05")
-		fmt.Printf("%-20s %-15s %-10s %-20s
-", t, e.PeerName, e.Type, e.Data)
+		fmt.Printf("%-20s %-15s %-10s %-20s\n", t, e.PeerName, e.Type, e.Data)
 	}
 }

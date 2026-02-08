@@ -59,8 +59,7 @@ func runDaemon() {
 
 	ipcServer.GetStatus = statusFunc
 	go ipcServer.Start()
-	fmt.Printf("IPC Server active at: %s
-", ipcServer.SocketPath)
+	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
 
 	// Start DNS Bridge if requested
 	if *dnsAddr != "" {
@@ -285,13 +284,9 @@ func runListen() {
 					historyManager.Log(peer.Name, "DROP", "Receiving file: "+fileName)
 					go func() {
 						if err := zdns.ReceiveFile(senderAddr, peer, fileName, dropDir); err != nil {
-							fmt.Printf("
-[DROP ERROR] Failed to receive %s: %v
-", fileName, err)
+							fmt.Printf("\n[DROP ERROR] Failed to receive %s: %v\n", fileName, err)
 						} else {
-							fmt.Printf("
-[DROP SUCCESS] Received %s in %s
-", fileName, dropDir)
+							fmt.Printf("\n[DROP SUCCESS] Received %s in %s\n", fileName, dropDir)
 						}
 					}()
 				}
@@ -318,8 +313,7 @@ func runListen() {
 			}
 		}
 
-		fmt.Printf("[%s] %s - Battery: %d%% - %s
-",
+		fmt.Printf("[%s] %s - Battery: %d%% - %s\n",
 			time.Now().Format("15:04:05"), peer.Name, blob.BatteryLevel, blob.DeviceState)
 	})
 	if err != nil {
@@ -350,8 +344,7 @@ func runAdvertise() {
 
 	info := sysinfo.NewInfoProvider()
 
-	fmt.Printf("Advertising to %d peers...
-", len(peers))
+	fmt.Printf("Advertising to %d peers...\n", len(peers))
 	for {
 		battery := info.GetBatteryLevel()
 		state := info.GetDeviceState()
