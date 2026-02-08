@@ -12,6 +12,6 @@
   },
   "runtime": {
     "daemon": true,
-    "pulse": false
+    "pulse": true
   }
 }
