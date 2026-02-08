@@ -7,10 +7,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
+	"github.com/nathfavour/zdns/pkg/ipc"
 	"github.com/nathfavour/zdns/pkg/sysinfo"
 	"github.com/nathfavour/zdns/pkg/zdns"
+)
+
+// Global state for the daemon to track live peers
+var (
+	livePeers   = make(map[[32]byte]ipc.PeerStatus)
+	livePeersMu sync.RWMutex
 )
 
 type Identity struct {
