@@ -305,6 +305,8 @@ func main() {
 		runExec()
 	case "history":
 		runHistory()
+	case "proxy":
+		runProxy()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -324,9 +326,99 @@ func printUsage() {
 	fmt.Println("  zdns status                        Show status of discovered peers")
 	fmt.Println("  zdns dash                          Show real-time TUI dashboard")
 	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service")
+	fmt.Println("  zdns proxy <peer> <lport>:<rport>  Proxy a local port to a remote service")
 	fmt.Println("  zdns peers [list|rm|rename]        Manage trusted peers")
 	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
 	fmt.Println("  zdns history                       Show encrypted event history")
+}
+
+func runProxy() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: zdns proxy <peer_name> <local_port>:<remote_tag_or_port>")
+		return
+	}
+	targetPeer := os.Args[2]
+	mapping := os.Args[3]
+	parts := strings.Split(mapping, ":")
+	if len(parts) != 2 {
+		log.Fatal("Invalid mapping format. Use local_port:remote_target")
+	}
+	localPort, remoteTarget := parts[0], parts[1]
+
+	storage, _ := getStorage()
+	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
+
+	// Start local listener
+	l, err := net.Listen("tcp", "127.0.0.1:"+localPort)
+	if err != nil {
+		log.Fatalf("Failed to listen on localhost:%s: %v", localPort, err)
+	}
+	fmt.Printf("Proxying localhost:%s -> %s (%s)...\n", localPort, targetPeer, remoteTarget)
+
+	for {
+		clientConn, err := l.Accept()
+		if err != nil {
+			continue
+		}
+
+		// On every new connection, re-resolve the peer IP/Port from the daemon
+		go func() {
+			defer clientConn.Close()
+			
+			// Dial daemon
+			dConn, err := net.Dial("unix", socketPath)
+			if err != nil {
+				return
+			}
+			json.NewEncoder(dConn).Encode(ipc.Request{Command: "list_peers"})
+			var resp ipc.Response
+			json.NewDecoder(dConn).Decode(&resp)
+			dConn.Close()
+
+			var peer *ipc.PeerStatus
+			for _, p := range resp.Peers {
+				if p.Name == targetPeer {
+					peer = &p
+					break
+				}
+			}
+			if peer == nil {
+				return
+			}
+
+			// Resolve remote port
+			rPort := remoteTarget
+			tags := strings.Split(peer.Tags, ",")
+			for _, t := range tags {
+				tp := strings.Split(t, ":")
+				if tp[0] == remoteTarget && len(tp) > 1 {
+					rPort = tp[1]
+					break
+				}
+			}
+
+			// Dial remote peer
+			remoteAddr := net.JoinHostPort(peer.IP, rPort)
+			remoteConn, err := net.DialTimeout("tcp", remoteAddr, 5*time.Second)
+			if err != nil {
+				return
+			}
+			defer remoteConn.Close()
+
+			// Bridge them
+			errChan := make(chan error, 2)
+			go func() {
+				_, err := io.Copy(remoteConn, clientConn)
+				errChan <- err
+			}()
+			go func() {
+				_, err := io.Copy(clientConn, remoteConn)
+				errChan <- err
+			}()
+
+			<-errChan
+		}()
+	}
 }
 
 func runHistory() {
