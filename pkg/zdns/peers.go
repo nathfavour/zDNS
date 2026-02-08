@@ -7,9 +7,9 @@ import (
 
 // Peer represents a trusted device.
 type Peer struct {
-	Name         string
-	PublicKey    [32]byte
-	SharedSecret []byte // Derived from OOB pairing
+	Name         string   `json:"name"`
+	PublicKey    [32]byte `json:"public_key"`
+	SharedSecret []byte   `json:"-"` // Never serialized to the main metadata file
 }
 
 // PeerStore manages trusted peers.
