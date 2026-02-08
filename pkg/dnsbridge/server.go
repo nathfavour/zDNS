@@ -2,7 +2,6 @@ package dnsbridge
 
 import (
 	"fmt"
-	"net"
 	"strings"
 
 	"github.com/miekg/dns"
@@ -23,8 +22,7 @@ func NewServer(addr string) *Server {
 func (s *Server) Start() error {
 	dns.HandleFunc("zdns.", s.handleDNSRequest)
 	server := &dns.Server{Addr: s.Addr, Net: "udp"}
-	fmt.Printf("DNS Bridge active at %s (Resolving .zdns)
-", s.Addr)
+	fmt.Printf("DNS Bridge active at %s (Resolving .zdns)\n", s.Addr)
 	return server.ListenAndServe()
 }
 

@@ -15,11 +15,13 @@ import (
 	"sync"
 	"time"
 
-			"github.com/nathfavour/zdns/pkg/commands"
+				"github.com/nathfavour/zdns/pkg/commands"
 
-			"github.com/nathfavour/zdns/pkg/ipc"
+				"github.com/nathfavour/zdns/pkg/dnsbridge"
 
-			"github.com/nathfavour/zdns/pkg/sysinfo"
+				"github.com/nathfavour/zdns/pkg/ipc"
+
+				"github.com/nathfavour/zdns/pkg/sysinfo"
 
 			"github.com/nathfavour/zdns/pkg/triggers"
 
@@ -500,12 +502,15 @@ func runPeers() {
 func runDaemon() {
 	fs := flag.NewFlagSet("daemon", flag.ExitOnError)
 	tags := fs.String("tags", "", "Comma-separated service tags")
+	dnsAddr := fs.String("dns", "", "Enable DNS bridge on address (e.g. 127.0.0.1:5353)")
 	fs.Parse(os.Args[2:])
 
 	fmt.Println("Starting zDNS Daemon...")
 	
 	storage, _ := getStorage()
 	triggerEngine, _ = triggers.NewEngine(storage.ConfigDir)
+	cmdExecutor, _ = commands.NewExecutor(storage.ConfigDir)
+	historyManager, _ = zdns.NewHistoryManager(storage.ConfigDir, storage.GetVault())
 
 	store := zdns.NewPeerStore()
 	
@@ -520,7 +525,7 @@ func runDaemon() {
 		log.Fatalf("IPC init failed: %v", err)
 	}
 
-	ipcServer.GetStatus = func() []ipc.PeerStatus {
+	statusFunc := func() []ipc.PeerStatus {
 		livePeersMu.RLock()
 		defer livePeersMu.RUnlock()
 		status := make([]ipc.PeerStatus, 0, len(livePeers))
@@ -530,8 +535,16 @@ func runDaemon() {
 		return status
 	}
 
+	ipcServer.GetStatus = statusFunc
 	go ipcServer.Start()
 	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
+
+	// Start DNS Bridge if requested
+	if *dnsAddr != "" {
+		dnsServer := dnsbridge.NewServer(*dnsAddr)
+		dnsServer.GetStatus = statusFunc
+		go dnsServer.Start()
+	}
 
 	// Background Task: Periodic PING to live peers for latency
 	go func() {
