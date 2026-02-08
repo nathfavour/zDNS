@@ -70,8 +70,7 @@ func SendFile(path string, peer *Peer, listener net.Listener) error {
 		}
 	}
 
-	fmt.Printf("File '%s' (%d bytes) sent to peer.
-", fi.Name(), fi.Size())
+	fmt.Printf("File '%s' (%d bytes) sent to peer.\n", fi.Name(), fi.Size())
 	return nil
 }
 
@@ -123,8 +122,7 @@ func ReceiveFile(addr string, peer *Peer, fileName string, saveDir string) error
 		outFile.Write(plaintext)
 	}
 
-	fmt.Printf("Received file: %s
-", outPath)
+	fmt.Printf("Received file: %s\n") outPath)
 	return nil
 }
 
