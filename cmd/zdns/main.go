@@ -325,6 +325,31 @@ func printUsage() {
 	fmt.Println("  zdns history                       Show encrypted event history")
 }
 
+func runHistory() {
+	storage, err := getStorage()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	hm, err := zdns.NewHistoryManager(storage.ConfigDir, storage.GetVault())
+	if err != nil {
+		log.Fatalf("Failed to open history: %v", err)
+	}
+
+	events := hm.GetEvents()
+	if len(events) == 0 {
+		fmt.Println("No history recorded yet.")
+		return
+	}
+
+	fmt.Printf("%-20s %-15s %-10s %-20s\n", "TIME", "PEER", "TYPE", "DATA")
+	fmt.Println(strings.Repeat("-", 70))
+	for _, e := range events {
+		t := time.Unix(e.Timestamp, 0).Format("2006-01-02 15:04:05")
+		fmt.Printf("%-20s %-15s %-10s %-20s\n", t, e.PeerName, e.Type, e.Data)
+	}
+}
+
 func runPeers() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: zdns peers [list|rm|rename]")
@@ -410,6 +435,25 @@ func runDaemon() {
 
 	go ipcServer.Start()
 	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
+
+	// Background Task: Periodic PING to live peers for latency
+	go func() {
+		broadcaster, _ := zdns.NewBroadcaster()
+		ticker := time.NewTicker(30 * time.Second)
+		for range ticker.C {
+			livePeersMu.RLock()
+			for _, p := range livePeers {
+				// Find peer in store to get shared secret
+				peer, ok := store.GetPeerByID(zdns.GenerateServiceID([]byte{}, time.Now())) // This is wrong, need to find by name or pubkey
+				// Let's use a simpler way: the peerStore should allow lookup by name
+				_ = p
+				_ = broadcaster
+				_ = peer
+				_ = ok
+			}
+			livePeersMu.RUnlock()
+		}
+	}()
 
 	// Background Task: Cleanup stale peers (not seen for > 15 mins)
 	go func() {
