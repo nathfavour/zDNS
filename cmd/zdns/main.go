@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -647,6 +648,7 @@ func runDaemon() {
 	fs := flag.NewFlagSet("daemon", flag.ExitOnError)
 	tags := fs.String("tags", "", "Comma-separated service tags")
 	dnsAddr := fs.String("dns", "", "Enable DNS bridge on address (e.g. 127.0.0.1:5353)")
+	relayURL := fs.String("relay", "", "Signaling relay URL (e.g. http://my-relay.com:8080)")
 	fs.Parse(os.Args[2:])
 
 	fmt.Println("Starting zDNS Daemon...")
@@ -688,6 +690,49 @@ func runDaemon() {
 		dnsServer := dnsbridge.NewServer(*dnsAddr)
 		dnsServer.GetStatus = statusFunc
 		go dnsServer.Start()
+	}
+
+	// Background Task: Relay Integration
+	if *relayURL != "" {
+		id, _ := getIdentity(storage)
+		info := sysinfo.NewInfoProvider()
+		
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			for range ticker.C {
+				// 1. Check-in myself
+				for _, peer := range peers {
+					blob := &zdns.StateBlob{
+						Type:         zdns.TypeStatus,
+						DeviceID:     id.Public,
+						DeviceState:  info.GetDeviceState(),
+						BatteryLevel: info.GetBatteryLevel(),
+						Timestamp:    time.Now().Unix(),
+						Tags:         *tags,
+					}
+					zdns.PostToRelay(*relayURL, id.Public, peer.SharedSecret, blob)
+				}
+
+				// 2. Query for peers
+				for _, peer := range peers {
+					blob, err := zdns.QueryRelay(*relayURL, peer.PublicKey, peer.SharedSecret)
+					if err == nil {
+						// Update livePeers with relay data
+						livePeersMu.Lock()
+						livePeers[peer.PublicKey] = ipc.PeerStatus{
+							Name:      peer.Name,
+							IP:        net.IP(blob.IP[:]).String() + " (Relay)",
+							Battery:   blob.BatteryLevel,
+							State:     blob.DeviceState.String(),
+							LastSeen:  time.Now().Unix(),
+							PublicKey: fmt.Sprintf("%x", peer.PublicKey[:4]),
+							Tags:      blob.Tags,
+						}
+						livePeersMu.Unlock()
+					}
+				}
+			}
+		}()
 	}
 
 	// Background Task: Periodic PING to live peers for latency
