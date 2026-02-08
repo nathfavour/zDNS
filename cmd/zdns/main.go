@@ -71,6 +71,7 @@ func runInvite() {
 func runJoin() {
 	fs := flag.NewFlagSet("join", flag.ExitOnError)
 	code := fs.String("invite", "", "The pairing code from your peer")
+	days := fs.Int("days", 0, "Number of days trust should last (0 for infinite)")
 	fs.Parse(os.Args[2:])
 
 	if *code == "" {
@@ -87,10 +88,16 @@ func runJoin() {
 		log.Fatal(err)
 	}
 
+	var expiresAt int64
+	if *days > 0 {
+		expiresAt = time.Now().AddDate(0, 0, *days).Unix()
+	}
+
 	peers, _ := storage.LoadPeers()
 	newPeer := &zdns.Peer{
 		Name:         invite.Name,
 		PublicKey:    invite.PublicKey,
+		ExpiresAt:    expiresAt,
 		SharedSecret: invite.SharedSecret,
 	}
 	peers = append(peers, newPeer)

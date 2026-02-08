@@ -8,8 +8,9 @@ import (
 // Peer represents a trusted device.
 type Peer struct {
 	Name         string   `json:"name"`
-	PublicKey    [32]byte `json:"public_key"`
-	SharedSecret []byte   `json:"-"` // Never serialized to the main metadata file
+	PublicKey    [32]byte `json:"public_key"` // Long-term X25519 Public Key
+	ExpiresAt    int64    `json:"expires_at"`
+	SharedSecret []byte   `json:"-"`          // Derived Root Secret
 }
 
 // PeerStore manages trusted peers.

@@ -1,6 +1,7 @@
 package zdns
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net"
 	"time"
@@ -73,12 +74,29 @@ func (l *Listener) Listen(handler func(peer *Peer, blob *StateBlob)) error {
 			continue
 		}
 
+		// Security: Check for peer expiration
+		if peer.ExpiresAt > 0 && time.Now().Unix() > peer.ExpiresAt {
+			continue
+		}
+
 		var nonce [12]byte
 		copy(nonce[:], buf[16:28])
-		ciphertext := buf[28:n]
+		
+		// The ciphertext is always exactly 76 bytes for our StateBlob (60 bytes + 16 tag)
+		// Any bytes beyond that are random padding.
+		const ciphertextLen = 76
+		if n < 16+12+ciphertextLen {
+			continue
+		}
+		ciphertext := buf[28 : 28+ciphertextLen]
 
 		blob, err := DecryptStateBlob(peer.SharedSecret, nonce, ciphertext)
 		if err != nil {
+			continue
+		}
+
+		// Security: Validate that the DeviceID in the blob matches the Peer
+		if blob.DeviceID != peer.PublicKey {
 			continue
 		}
 
@@ -128,10 +146,16 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8) er
 
 	serviceID := GenerateServiceID(peer.SharedSecret, time.Now())
 
-	packet := make([]byte, 16+12+len(ciphertext))
+	// Add random padding (0-31 bytes) to obscure packet length
+	var padding [32]byte
+	rand.Read(padding[:])
+	paddingLen := int(padding[0] % 32)
+
+	packet := make([]byte, 16+12+len(ciphertext)+paddingLen)
 	copy(packet[0:16], serviceID[:])
 	copy(packet[16:28], nonce[:])
-	copy(packet[28:], ciphertext)
+	copy(packet[28 : 28+len(ciphertext)], ciphertext)
+	copy(packet[28+len(ciphertext):], padding[:paddingLen])
 
 	ifaces, err := net.Interfaces()
 	if err != nil {
