@@ -82,9 +82,8 @@ func (l *Listener) Listen(handler func(peer *Peer, blob *StateBlob)) error {
 		var nonce [12]byte
 		copy(nonce[:], buf[16:28])
 		
-		// The ciphertext is always exactly 76 bytes for our StateBlob (60 bytes + 16 tag)
-		// Any bytes beyond that are random padding.
-		const ciphertextLen = 76
+		// The ciphertext is always exactly 140 bytes for our StateBlob (124 bytes + 16 tag)
+		const ciphertextLen = 140
 		if n < 16+12+ciphertextLen {
 			continue
 		}
@@ -131,12 +130,13 @@ func NewBroadcaster() (*Broadcaster, error) {
 	}, nil
 }
 
-func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8) error {
+func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, tags string) error {
 	blob := &StateBlob{
 		DeviceID:     peer.PublicKey,
 		DeviceState:  state,
 		BatteryLevel: battery,
 		Timestamp:    time.Now().Unix(),
+		Tags:         tags,
 	}
 
 	ciphertext, nonce, err := EncryptStateBlob(peer.SharedSecret, blob)

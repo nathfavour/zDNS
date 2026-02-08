@@ -289,6 +289,7 @@ func runListen() {
 			State:     blob.DeviceState.String(),
 			LastSeen:  time.Now().Unix(),
 			PublicKey: fmt.Sprintf("%x", peer.PublicKey[:4]), // Short fingerprint
+			Tags:      blob.Tags,
 		}
 		livePeersMu.Unlock()
 

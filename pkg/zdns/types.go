@@ -28,12 +28,13 @@ func (s DeviceState) String() string {
 
 // StateBlob is the decrypted payload containing device information.
 type StateBlob struct {
-	DeviceID     [32]byte    `json:"id"`      // Public Key Fingerprint
-	IP           [16]byte    `json:"ip"`      // IPv6 or IPv4-mapped IPv6
+	DeviceID     [32]byte    `json:"id"`
+	IP           [16]byte    `json:"ip"`
 	Port         uint16      `json:"port"`
 	DeviceState  DeviceState `json:"state"`
 	BatteryLevel uint8       `json:"battery"`
-	Timestamp    int64       `json:"ts"`      // Unix timestamp to prevent replay
+	Timestamp    int64       `json:"ts"`
+	Tags         string      `json:"tags"` // Comma-separated service tags
 }
 
 // Packet is the wire-format for zDNS.

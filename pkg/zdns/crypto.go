@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -43,13 +44,23 @@ func EncryptStateBlob(key []byte, blob *StateBlob) ([]byte, [12]byte, error) {
 	}
 
 	// Simple manual serialization for speed/control
-	data := make([]byte, 32+16+2+1+1+8)
+	// Base: 32+16+2+1+1+8 = 60 bytes
+	// Tags: 64 bytes
+	// Total: 124 bytes
+	data := make([]byte, 124)
 	copy(data[0:32], blob.DeviceID[:])
 	copy(data[32:48], blob.IP[:])
 	binary.BigEndian.PutUint16(data[48:50], blob.Port)
 	data[50] = byte(blob.DeviceState)
 	data[51] = blob.BatteryLevel
 	binary.BigEndian.PutUint64(data[52:60], uint64(blob.Timestamp))
+	
+	// Copy tags (max 64 bytes)
+	tagBytes := []byte(blob.Tags)
+	if len(tagBytes) > 64 {
+		tagBytes = tagBytes[:64]
+	}
+	copy(data[60:], tagBytes)
 
 	ciphertext := aead.Seal(nil, nonce[:], data, nil)
 	return ciphertext, nonce, nil
@@ -67,7 +78,7 @@ func DecryptStateBlob(key []byte, nonce [12]byte, ciphertext []byte) (*StateBlob
 		return nil, ErrDecryptionFailed
 	}
 
-	if len(plaintext) < 60 {
+	if len(plaintext) < 124 {
 		return nil, ErrInvalidPacket
 	}
 
@@ -78,6 +89,10 @@ func DecryptStateBlob(key []byte, nonce [12]byte, ciphertext []byte) (*StateBlob
 	blob.DeviceState = DeviceState(plaintext[50])
 	blob.BatteryLevel = plaintext[51]
 	blob.Timestamp = int64(binary.BigEndian.Uint64(plaintext[52:60]))
+	
+	// Extract tags and trim null bytes
+	tags := string(plaintext[60:124])
+	blob.Tags = strings.TrimRight(tags, "\x00")
 
 	return blob, nil
 }
