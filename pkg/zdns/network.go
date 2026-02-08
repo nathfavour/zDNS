@@ -25,20 +25,25 @@ func NewListener(ps *PeerStore) (*Listener, error) {
 	}
 
 	pc := ipv4.NewPacketConn(c)
-	en0, err := net.InterfaceByName("eth0") // Default to eth0 for now, should be configurable
+	
+	ifaces, err := net.Interfaces()
 	if err != nil {
-		// Fallback to finding any up interface
-		ifaces, _ := net.Interfaces()
-		for _, iface := range ifaces {
-			if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagMulticast != 0 {
-				en0 = &iface
-				break
-			}
+		return nil, err
+	}
+
+	group := &net.UDPAddr{IP: net.ParseIP(MulticastAddr)}
+	joined := 0
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
+		}
+		if err := pc.JoinGroup(&iface, group); err == nil {
+			joined++
 		}
 	}
 
-	if err := pc.JoinGroup(en0, &net.UDPAddr{IP: net.ParseIP(MulticastAddr)}); err != nil {
-		return nil, err
+	if joined == 0 {
+		return nil, fmt.Errorf("no multicast-capable interfaces found")
 	}
 
 	return &Listener{
@@ -87,7 +92,7 @@ func (l *Listener) Listen(handler func(peer *Peer, blob *StateBlob)) error {
 }
 
 type Broadcaster struct {
-	conn *net.UDPConn
+	pc   *ipv4.PacketConn
 	addr *net.UDPAddr
 }
 
@@ -97,13 +102,13 @@ func NewBroadcaster() (*Broadcaster, error) {
 		return nil, err
 	}
 
-	conn, err := net.DialUDP("udp4", nil, addr)
+	c, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {
 		return nil, err
 	}
 
 	return &Broadcaster{
-		conn: conn,
+		pc:   ipv4.NewPacketConn(c),
 		addr: addr,
 	}, nil
 }
@@ -115,9 +120,6 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8) er
 		BatteryLevel: battery,
 		Timestamp:    time.Now().Unix(),
 	}
-
-	// For IP, we'll just put zeros or try to find our local IP
-	// In a real impl, we'd use the actual interface IP
 
 	ciphertext, nonce, err := EncryptStateBlob(peer.SharedSecret, blob)
 	if err != nil {
@@ -131,6 +133,19 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8) er
 	copy(packet[16:28], nonce[:])
 	copy(packet[28:], ciphertext)
 
-	_, err = b.conn.Write(packet)
-	return err
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
+		}
+		// Set the interface for this broadcast
+		b.pc.SetMulticastInterface(&iface)
+		b.pc.WriteTo(packet, nil, b.addr)
+	}
+
+	return nil
 }

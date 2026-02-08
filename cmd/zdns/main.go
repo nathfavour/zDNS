@@ -26,6 +26,8 @@ func main() {
 		runListen()
 	case "advertise":
 		runAdvertise()
+	case "daemon":
+		runDaemon()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -38,7 +40,16 @@ func printUsage() {
 	fmt.Println("  zdns invite [--name NAME]          Generate a pairing invite")
 	fmt.Println("  zdns join --invite INVITE_CODE     Join a peer using an invite code")
 	fmt.Println("  zdns listen                        Listen for trusted peers")
-	fmt.Println("  zdns advertise [--name NAME]       Advertise current state")
+	fmt.Println("  zdns advertise                     Advertise current state")
+	fmt.Println("  zdns daemon                        Run both listener and advertiser")
+}
+
+func runDaemon() {
+	fmt.Println("Starting zDNS Daemon...")
+	// Run advertiser in background
+	go runAdvertise()
+	// Run listener in foreground
+	runListen()
 }
 
 func runInvite() {

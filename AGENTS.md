@@ -22,25 +22,32 @@ zDNS is a high-performance, privacy-focused local network discovery protocol des
 - Go 1.21 or higher.
 
 ### Compilation
-To build the Proof of Concept binaries:
+Use the provided Makefile for standard operations:
 
 ```bash
-# Build the Advertiser (e.g., for Android/Termux)
-go build -o advertiser ./cmd/advertiser
+# Build the binary
+make
 
-# Build the Listener (e.g., for Arch Linux server)
-go build -o listener ./cmd/listener
+# Run tests
+make test
+
+# Install to system (default /usr/local/bin)
+sudo make install
 ```
 
 ### Execution
-Run the binaries in separate terminals (or different devices on the same network):
+Run the unified `zdns` tool:
 
 ```bash
-# Start listening for trusted peers
-./listener
+# Pair devices
+zdns invite
+zdns join --invite <CODE>
 
-# Start broadcasting state
-./advertiser
+# Run the background daemon
+zdns daemon
+
+# Or use systemd (User Service)
+systemctl --user enable --now zdns
 ```
 
 ## Project Structure
