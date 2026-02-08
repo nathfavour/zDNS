@@ -10,9 +10,10 @@ import (
 type Storage struct {
 	ConfigDir string
 	Secrets   SecretStore
+	vault     *Vault
 }
 
-func NewStorage() (*Storage, error) {
+func NewStorage(password ...string) (*Storage, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, err
@@ -23,7 +24,16 @@ func NewStorage() (*Storage, error) {
 		return nil, err
 	}
 
-	secrets, err := NewFileSecretStore(zdnsDir)
+	var vault *Vault
+	if len(password) > 0 && password[0] != "" {
+		salt, err := GetOrCreateSalt(filepath.Join(zdnsDir, "vault.salt"))
+		if err != nil {
+			return nil, err
+		}
+		vault = NewVault(password[0], salt)
+	}
+
+	secrets, err := NewFileSecretStore(zdnsDir, vault)
 	if err != nil {
 		return nil, err
 	}
@@ -31,6 +41,7 @@ func NewStorage() (*Storage, error) {
 	return &Storage{
 		ConfigDir: zdnsDir,
 		Secrets:   secrets,
+		vault:     vault,
 	}, nil
 }
 
@@ -43,7 +54,6 @@ func (s *Storage) SavePeers(peers []*Peer) error {
 	// 1. Save Secrets via SecretStore
 	for _, p := range peers {
 		if len(p.SharedSecret) > 0 {
-			// We use PublicKey as the fingerprint for the device ID in this PoC
 			if err := s.Secrets.SetSecret(p.PublicKey, p.SharedSecret); err != nil {
 				return err
 			}
@@ -54,6 +64,13 @@ func (s *Storage) SavePeers(peers []*Peer) error {
 	data, err := json.MarshalIndent(peers, "", "  ")
 	if err != nil {
 		return err
+	}
+
+	if s.vault != nil {
+		data, err = s.vault.Encrypt(data)
+		if err != nil {
+			return err
+		}
 	}
 
 	return os.WriteFile(s.GetPeersPath(), data, 0600)
@@ -69,6 +86,13 @@ func (s *Storage) LoadPeers() ([]*Peer, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+
+	if s.vault != nil {
+		data, err = s.vault.Decrypt(data)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var peers []*Peer

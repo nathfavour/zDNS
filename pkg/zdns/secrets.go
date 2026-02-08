@@ -17,16 +17,20 @@ type SecretStore interface {
 
 // FileSecretStore implements SecretStore using a dedicated file.
 type FileSecretStore struct {
-	mu   sync.RWMutex
-	path string
-	data map[string][]byte
+	mu    sync.RWMutex
+	path  string
+	data  map[string][]byte
+	vault *Vault
 }
 
-func NewFileSecretStore(dir string) (*FileSecretStore, error) {
+func NewFileSecretStore(dir string, vault ...*Vault) (*FileSecretStore, error) {
 	path := filepath.Join(dir, "secrets.json")
 	store := &FileSecretStore{
 		path: path,
 		data: make(map[string][]byte),
+	}
+	if len(vault) > 0 {
+		store.vault = vault[0]
 	}
 
 	if err := store.load(); err != nil {
@@ -46,6 +50,13 @@ func (s *FileSecretStore) load() error {
 		return err
 	}
 
+	if s.vault != nil {
+		data, err = s.vault.Decrypt(data)
+		if err != nil {
+			return err
+		}
+	}
+
 	return json.Unmarshal(data, &s.data)
 }
 
@@ -54,6 +65,14 @@ func (s *FileSecretStore) save() error {
 	if err != nil {
 		return err
 	}
+
+	if s.vault != nil {
+		data, err = s.vault.Encrypt(data)
+		if err != nil {
+			return err
+		}
+	}
+
 	return os.WriteFile(s.path, data, 0600)
 }
 

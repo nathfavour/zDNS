@@ -36,16 +36,36 @@ import (
 
 		triggerEngine *triggers.Engine
 
+		masterPass    string
+
 	)
 
-type Identity struct {
+	
+
+	func getStorage() (*zdns.Storage, error) {
+
+		pass := masterPass
+
+		if pass == "" {
+
+			pass = os.Getenv("ZDNS_PASSWORD")
+
+		}
+
+		return zdns.NewStorage(pass)
+
+	}
+
+	
+
+	type Identity struct {
 	Name    string   `json:"name"`
 	Private [32]byte `json:"priv"`
 	Public  [32]byte `json:"pub"`
 }
 
 func runDash() {
-	storage, _ := zdns.NewStorage()
+	storage, _ := getStorage()
 	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
 	if err := tui.Run(socketPath); err != nil {
 		log.Fatalf("TUI Error: %v", err)
@@ -53,7 +73,7 @@ func runDash() {
 }
 
 func runStatus() {
-	storage, _ := zdns.NewStorage()
+	storage, _ := getStorage()
 	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
 
 	conn, err := net.Dial("unix", socketPath)
@@ -116,6 +136,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Simple global flag check
+	for i, arg := range os.Args {
+		if arg == "--pass" && i+1 < len(os.Args) {
+			masterPass = os.Args[i+1]
+			// Remove the flag so it doesn't break subcommands
+			os.Args = append(os.Args[:i], os.Args[i+2:]...)
+			break
+		}
+	}
+
 	switch os.Args[1] {
 	case "invite":
 		runInvite()
@@ -139,6 +169,8 @@ func main() {
 
 func printUsage() {
 	fmt.Println("zDNS - Zero-Trust Discovery Service")
+	fmt.Println("\nGlobal Flags:")
+	fmt.Println("  --pass PASSWORD                    Master password for the vault (or use ZDNS_PASSWORD env)")
 	fmt.Println("\nUsage:")
 	fmt.Println("  zdns invite [--name NAME]          Generate a pairing invite")
 	fmt.Println("  zdns join --invite INVITE_CODE     Join a peer using an invite code")
@@ -156,7 +188,7 @@ func runDaemon() {
 
 	fmt.Println("Starting zDNS Daemon...")
 	
-	storage, _ := zdns.NewStorage()
+	storage, _ := getStorage()
 	triggerEngine, _ = triggers.NewEngine(storage.ConfigDir)
 
 	store := zdns.NewPeerStore()
@@ -192,7 +224,7 @@ func runDaemon() {
 }
 
 func runAdvertiseWithTags(tags string) {
-	storage, _ := zdns.NewStorage()
+	storage, _ := getStorage()
 	peers, _ := storage.LoadPeers()
 	if len(peers) == 0 {
 		return
@@ -215,7 +247,7 @@ func runInvite() {
 	fs := flag.NewFlagSet("invite", flag.ExitOnError)
 	fs.Parse(os.Args[2:])
 
-	storage, _ := zdns.NewStorage()
+	storage, _ := getStorage()
 	id, err := getIdentity(storage)
 	if err != nil {
 		log.Fatalf("Failed to get identity: %v", err)
@@ -247,7 +279,7 @@ func runJoin() {
 		log.Fatalf("Failed to parse invite: %v", err)
 	}
 
-	storage, err := zdns.NewStorage()
+	storage, err := getStorage()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -285,7 +317,7 @@ func runJoin() {
 }
 
 func runListen() {
-	storage, err := zdns.NewStorage()
+	storage, err := getStorage()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -362,7 +394,7 @@ func runAdvertise() {
 	tags := fs.String("tags", "", "Comma-separated service tags")
 	fs.Parse(os.Args[2:])
 
-	storage, err := zdns.NewStorage()
+	storage, err := getStorage()
 	if err != nil {
 		log.Fatal(err)
 	}
