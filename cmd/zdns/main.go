@@ -12,17 +12,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nathfavour/zdns/pkg/ipc"
-	"github.com/nathfavour/zdns/pkg/sysinfo"
-	"github.com/nathfavour/zdns/pkg/tui"
-	"github.com/nathfavour/zdns/pkg/zdns"
-)
+		"github.com/nathfavour/zdns/pkg/ipc"
 
-// Global state for the daemon to track live peers
-var (
-	livePeers   = make(map[[32]byte]ipc.PeerStatus)
-	livePeersMu sync.RWMutex
-)
+		"github.com/nathfavour/zdns/pkg/sysinfo"
+
+		"github.com/nathfavour/zdns/pkg/triggers"
+
+		"github.com/nathfavour/zdns/pkg/tui"
+
+		"github.com/nathfavour/zdns/pkg/zdns"
+
+	)
+
+	
+
+	// Global state for the daemon to track live peers
+
+	var (
+
+		livePeers     = make(map[[32]byte]ipc.PeerStatus)
+
+		livePeersMu   sync.RWMutex
+
+		triggerEngine *triggers.Engine
+
+	)
 
 type Identity struct {
 	Name    string   `json:"name"`
