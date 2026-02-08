@@ -49,7 +49,15 @@ Run the binaries in separate terminals (or different devices on the same network
     - `crypto.go`: Encryption, decryption, and rolling hash logic.
     - `peers.go`: Secure management of trusted peer identities.
     - `network.go`: UDP Multicast listener and broadcaster implementation.
+    - `storage.go`: JSON persistence for the PeerStore using OS-standard config directories.
 - `cmd/`: Application entry points.
+
+## Data Persistence
+zDNS adheres to modern OS conventions for data storage:
+- **Linux:** `~/.config/zdns/`
+- **macOS:** `~/Library/Application Support/zdns/`
+- **Windows:** `%AppData%\zdns\`
+- **Permissions:** All configuration files are created with `0600` (user-only) permissions to protect cryptographic secrets.
     - `advertiser/`: PoC for a device announcing its state.
     - `listener/`: PoC for a device discovering trusted peers.
 

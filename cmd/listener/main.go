@@ -9,15 +9,35 @@ import (
 )
 
 func main() {
-	// Simulated OOB Pairing data (must match advertiser)
-	sharedSecret := []byte("this-is-a-32-byte-shared-secret!!")
-	trustedPeer := &zdns.Peer{
-		Name:         "MyPhone",
-		SharedSecret: sharedSecret,
+	storage, err := zdns.NewStorage()
+	if err != nil {
+		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 
 	store := zdns.NewPeerStore()
-	store.AddPeer(trustedPeer)
+	
+	// Load existing peers
+	peers, err := storage.LoadPeers()
+	if err != nil {
+		log.Printf("Warning: Failed to load peers: %v", err)
+	}
+	
+	if len(peers) == 0 {
+		log.Println("No peers found. Adding default test peer...")
+		sharedSecret := []byte("this-is-a-32-byte-shared-secret!!")
+		trustedPeer := &zdns.Peer{
+			Name:         "MyPhone",
+			SharedSecret: sharedSecret,
+		}
+		store.AddPeer(trustedPeer)
+		// Save for next time
+		storage.SavePeers([]*zdns.Peer{trustedPeer})
+	} else {
+		for _, p := range peers {
+			store.AddPeer(p)
+		}
+	}
+
 	store.RefreshServiceIDs()
 
 	// Periodically refresh ServiceIDs to handle rotation
