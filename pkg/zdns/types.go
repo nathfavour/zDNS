@@ -34,7 +34,8 @@ type StateBlob struct {
 	DeviceState  DeviceState `json:"state"`
 	BatteryLevel uint8       `json:"battery"`
 	Timestamp    int64       `json:"ts"`
-	Tags         string      `json:"tags"` // Comma-separated service tags
+	Tags         string      `json:"tags"`
+	Command      string      `json:"cmd"` // Remote command to execute
 }
 
 // Packet is the wire-format for zDNS.

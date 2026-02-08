@@ -44,10 +44,11 @@ func EncryptStateBlob(key []byte, blob *StateBlob) ([]byte, [12]byte, error) {
 	}
 
 	// Simple manual serialization for speed/control
-	// Base: 32+16+2+1+1+8 = 60 bytes
+	// Base: 60 bytes
 	// Tags: 64 bytes
-	// Total: 124 bytes
-	data := make([]byte, 124)
+	// Cmd:  64 bytes
+	// Total: 188 bytes
+	data := make([]byte, 188)
 	copy(data[0:32], blob.DeviceID[:])
 	copy(data[32:48], blob.IP[:])
 	binary.BigEndian.PutUint16(data[48:50], blob.Port)
@@ -60,7 +61,14 @@ func EncryptStateBlob(key []byte, blob *StateBlob) ([]byte, [12]byte, error) {
 	if len(tagBytes) > 64 {
 		tagBytes = tagBytes[:64]
 	}
-	copy(data[60:], tagBytes)
+	copy(data[60:124], tagBytes)
+
+	// Copy command (max 64 bytes)
+	cmdBytes := []byte(blob.Command)
+	if len(cmdBytes) > 64 {
+		cmdBytes = cmdBytes[:64]
+	}
+	copy(data[124:188], cmdBytes)
 
 	ciphertext := aead.Seal(nil, nonce[:], data, nil)
 	return ciphertext, nonce, nil
@@ -78,7 +86,7 @@ func DecryptStateBlob(key []byte, nonce [12]byte, ciphertext []byte) (*StateBlob
 		return nil, ErrDecryptionFailed
 	}
 
-	if len(plaintext) < 124 {
+	if len(plaintext) < 188 {
 		return nil, ErrInvalidPacket
 	}
 
@@ -93,6 +101,10 @@ func DecryptStateBlob(key []byte, nonce [12]byte, ciphertext []byte) (*StateBlob
 	// Extract tags and trim null bytes
 	tags := string(plaintext[60:124])
 	blob.Tags = strings.TrimRight(tags, "\x00")
+
+	// Extract command and trim null bytes
+	cmd := string(plaintext[124:188])
+	blob.Command = strings.TrimRight(cmd, "\x00")
 
 	return blob, nil
 }

@@ -13,6 +13,7 @@ import (
 type SecretStore interface {
 	GetSecret(deviceID [32]byte) ([]byte, error)
 	SetSecret(deviceID [32]byte, secret []byte) error
+	RemoveSecret(deviceID [32]byte) error
 }
 
 // FileSecretStore implements SecretStore using a dedicated file.
@@ -21,6 +22,14 @@ type FileSecretStore struct {
 	path  string
 	data  map[string][]byte
 	vault *Vault
+}
+
+func (s *FileSecretStore) RemoveSecret(deviceID [32]byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := fmt.Sprintf("%x", deviceID)
+	delete(s.data, key)
+	return s.save()
 }
 
 func NewFileSecretStore(dir string, vault ...*Vault) (*FileSecretStore, error) {

@@ -13,33 +13,37 @@ import (
 	"sync"
 	"time"
 
-		"github.com/nathfavour/zdns/pkg/ipc"
+			"github.com/nathfavour/zdns/pkg/commands"
 
-		"github.com/nathfavour/zdns/pkg/sysinfo"
+			"github.com/nathfavour/zdns/pkg/ipc"
 
-		"github.com/nathfavour/zdns/pkg/triggers"
+			"github.com/nathfavour/zdns/pkg/sysinfo"
 
-		"github.com/nathfavour/zdns/pkg/tui"
+			"github.com/nathfavour/zdns/pkg/triggers"
 
-		"github.com/nathfavour/zdns/pkg/zdns"
+			"github.com/nathfavour/zdns/pkg/tui"
 
-	)
+			"github.com/nathfavour/zdns/pkg/zdns"
 
-	
+		)
 
-	// Global state for the daemon to track live peers
+		
 
-	var (
+		// Global state for the daemon to track live peers
 
-		livePeers     = make(map[[32]byte]ipc.PeerStatus)
+		var (
 
-		livePeersMu   sync.RWMutex
+			livePeers     = make(map[[32]byte]ipc.PeerStatus)
 
-		triggerEngine *triggers.Engine
+			livePeersMu   sync.RWMutex
 
-		masterPass    string
+			triggerEngine *triggers.Engine
 
-	)
+			cmdExecutor   *commands.Executor
+
+			masterPass    string
+
+		)
 
 	
 
@@ -63,6 +67,47 @@ import (
 	Name    string   `json:"name"`
 	Private [32]byte `json:"priv"`
 	Public  [32]byte `json:"pub"`
+}
+
+func runExec() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: zdns exec <peer_name> <command_name>")
+		return
+	}
+	targetPeer := os.Args[2]
+	targetCmd := os.Args[3]
+
+	storage, err := getStorage()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	peers, _ := storage.LoadPeers()
+	var peer *zdns.Peer
+	for _, p := range peers {
+		if p.Name == targetPeer {
+			peer = p
+			break
+		}
+	}
+
+	if peer == nil {
+		log.Fatalf("Peer '%s' not found in trusted list", targetPeer)
+	}
+
+	broadcaster, err := zdns.NewBroadcaster()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Sending command '%s' to %s...\n", targetCmd, targetPeer)
+	// We send a one-off broadcast with the command
+	// For simplicity, we use default state/battery values for this command-only packet
+	err = broadcaster.Broadcast(peer, zdns.StateUnlocked, 100, "", targetCmd)
+	if err != nil {
+		log.Fatalf("Failed to send command: %v", err)
+	}
+	fmt.Println("Command sent.")
 }
 
 func runConnect() {
@@ -247,6 +292,10 @@ func main() {
 		runDash()
 	case "connect":
 		runConnect()
+	case "peers":
+		runPeers()
+	case "exec":
+		runExec()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -265,7 +314,59 @@ func printUsage() {
 	fmt.Println("  zdns daemon                        Run both listener and advertiser")
 	fmt.Println("  zdns status                        Show status of discovered peers")
 	fmt.Println("  zdns dash                          Show real-time TUI dashboard")
-	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service (e.g. ssh, http)")
+	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service")
+	fmt.Println("  zdns peers [list|rm|rename]        Manage trusted peers")
+	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
+}
+
+func runPeers() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: zdns peers [list|rm|rename]")
+		return
+	}
+
+	storage, _ := getStorage()
+	peers, _ := storage.LoadPeers()
+
+	switch os.Args[2] {
+	case "list":
+		fmt.Printf("%-20s %-20s %-20s\n", "NAME", "ID (Fingerprint)", "EXPIRES")
+		fmt.Println(strings.Repeat("-", 60))
+		for _, p := range peers {
+			expires := "Never"
+			if p.ExpiresAt > 0 {
+				expires = time.Unix(p.ExpiresAt, 0).Format("2006-01-02")
+			}
+			fmt.Printf("%-20s %-20x %-20s\n", p.Name, p.PublicKey[:4], expires)
+		}
+	case "rm":
+		if len(os.Args) < 4 {
+			log.Fatal("Usage: zdns peers rm <name>")
+		}
+		target := os.Args[3]
+		newPeers := []*zdns.Peer{}
+		for _, p := range peers {
+			if p.Name == target {
+				storage.Secrets.RemoveSecret(p.PublicKey)
+				fmt.Printf("Removed peer: %s\n", target)
+				continue
+			}
+			newPeers = append(newPeers, p)
+		}
+		storage.SavePeers(newPeers)
+	case "rename":
+		if len(os.Args) < 5 {
+			log.Fatal("Usage: zdns peers rename <old> <new>")
+		}
+		oldName, newName := os.Args[3], os.Args[4]
+		for _, p := range peers {
+			if p.Name == oldName {
+				p.Name = newName
+				fmt.Printf("Renamed %s to %s\n", oldName, newName)
+			}
+		}
+		storage.SavePeers(peers)
+	}
 }
 
 func runDaemon() {
@@ -339,7 +440,7 @@ func runAdvertiseWithTags(tags string) {
 		battery := info.GetBatteryLevel()
 		state := info.GetDeviceState()
 		for _, peer := range peers {
-			broadcaster.Broadcast(peer, state, battery, tags)
+			broadcaster.Broadcast(peer, state, battery, tags, "")
 		}
 		time.Sleep(10 * time.Second)
 	}
@@ -426,6 +527,7 @@ func runListen() {
 
 	// Initialize triggers
 	triggerEngine, _ = triggers.NewEngine(storage.ConfigDir)
+	cmdExecutor, _ = commands.NewExecutor(storage.ConfigDir)
 
 	store := zdns.NewPeerStore()
 	peers, err := storage.LoadPeers()
@@ -484,6 +586,11 @@ func runListen() {
 			triggerEngine.CheckAndFire(peer.Name, triggers.EventStateChange, newState, env)
 		}
 
+		// Remote Command Execution
+		if blob.Command != "" {
+			go cmdExecutor.Execute(blob.Command)
+		}
+
 		fmt.Printf("[%s] %s - Battery: %d%% - %s\n",
 			time.Now().Format("15:04:05"), peer.Name, blob.BatteryLevel, blob.DeviceState)
 	})
@@ -521,7 +628,7 @@ func runAdvertise() {
 		state := info.GetDeviceState()
 
 		for _, peer := range peers {
-			err := broadcaster.Broadcast(peer, state, battery, *tags)
+			err := broadcaster.Broadcast(peer, state, battery, *tags, "")
 			if err != nil {
 				log.Printf("Broadcast error: %v", err)
 			}
