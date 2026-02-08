@@ -191,3 +191,30 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, ta
 
 	return nil
 }
+
+// BroadcastChaff sends a random noise packet to confuse traffic analysis.
+func (b *Broadcaster) BroadcastChaff() error {
+	// Match the size of a standard packet: 16 + 12 + 204 + (0-31 padding)
+	var p [1]byte
+	rand.Read(p[:])
+	paddingLen := int(p[0] % 32)
+
+	data := make([]byte, 16+12+204+paddingLen)
+	if _, err := rand.Read(data); err != nil {
+		return err
+	}
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return err
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
+		}
+		b.pc.SetMulticastInterface(&iface)
+		b.pc.WriteTo(data, nil, b.addr)
+	}
+	return nil
+}

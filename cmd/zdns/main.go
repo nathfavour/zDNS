@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -442,7 +443,17 @@ func runAdvertiseWithTags(tags string) {
 		for _, peer := range peers {
 			broadcaster.Broadcast(peer, state, battery, tags, "")
 		}
-		time.Sleep(10 * time.Second)
+
+		// Randomized sleep (7-14s)
+		var b [1]byte
+		rand.Read(b[:])
+		jitter := int(b[0] % 8)
+		time.Sleep(time.Duration(7+jitter) * time.Second)
+
+		// 20% chance to send Chaff
+		if b[0]%5 == 0 {
+			broadcaster.BroadcastChaff()
+		}
 	}
 }
 
@@ -633,7 +644,17 @@ func runAdvertise() {
 				log.Printf("Broadcast error: %v", err)
 			}
 		}
-		time.Sleep(10 * time.Second)
+
+		// Randomized sleep (7-14s) to break timing analysis
+		var b [1]byte
+		rand.Read(b[:])
+		jitter := int(b[0] % 8)
+		time.Sleep(time.Duration(7+jitter) * time.Second)
+
+		// 20% chance to send Chaff (noise)
+		if b[0]%5 == 0 {
+			broadcaster.BroadcastChaff()
+		}
 	}
 }
 
