@@ -56,7 +56,7 @@ func NewListener(ps *PeerStore) (*Listener, error) {
 func (l *Listener) Listen(handler func(peer *Peer, blob *StateBlob)) error {
 	buf := make([]byte, 2048)
 	for {
-		n, _, _, err := l.conn.ReadFrom(buf)
+		n, _, src, err := l.conn.ReadFrom(buf)
 		if err != nil {
 			return err
 		}
@@ -92,6 +92,11 @@ func (l *Listener) Listen(handler func(peer *Peer, blob *StateBlob)) error {
 		blob, err := DecryptStateBlob(peer.SharedSecret, nonce, ciphertext)
 		if err != nil {
 			continue
+		}
+
+		// Update Blob IP with the actual source IP if the blob IP is empty or use as preferred source
+		if udpAddr, ok := src.(*net.UDPAddr); ok {
+			copy(blob.IP[:], udpAddr.IP.To16())
 		}
 
 		// Security: Validate that the DeviceID in the blob matches the Peer
