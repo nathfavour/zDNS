@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/nathfavour/zdns/pkg/sysinfo"
 	"github.com/nathfavour/zdns/pkg/zdns"
 )
 
@@ -155,10 +156,15 @@ func runAdvertise() {
 		log.Fatal(err)
 	}
 
+	info := sysinfo.NewInfoProvider()
+
 	fmt.Printf("Advertising to %d peers...\n", len(peers))
 	for {
+		battery := info.GetBatteryLevel()
+		state := info.GetDeviceState()
+
 		for _, peer := range peers {
-			err := broadcaster.Broadcast(peer, zdns.StateUnlocked, 85)
+			err := broadcaster.Broadcast(peer, state, battery)
 			if err != nil {
 				log.Printf("Broadcast error: %v", err)
 			}
