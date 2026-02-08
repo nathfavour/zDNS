@@ -29,6 +29,28 @@ func DeriveSharedSecret(myPriv, peerPub [32]byte) ([]byte, error) {
 	return curve25519.X25519(myPriv[:], peerPub[:])
 }
 
+// ExportKey converts a 32-byte key to a hex string for paper backup.
+func ExportKey(key [32]byte) string {
+	return fmt.Sprintf("%x", key)
+}
+
+// ImportKey converts a hex string back to a 32-byte key.
+func ImportKey(hexStr string) ([32]byte, error) {
+	var key [32]byte
+	n, err := fmt.Sscanf(hexStr, "%x", &key)
+	if err != nil || n != 1 {
+		return key, fmt.Errorf("invalid key format")
+	}
+	return key, nil
+}
+
+// ReconstitutePublic derives the public key from a private key.
+func ReconstitutePublic(priv [32]byte) [32]byte {
+	var pub [32]byte
+	curve25519.ScalarBaseMult(&pub, &priv)
+	return pub
+}
+
 // CreateInvite generates a pairing string containing the public key.
 func CreateInvite(name string, pubKey [32]byte) (string, error) {
 	invite := &PairingInvite{

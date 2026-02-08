@@ -364,6 +364,8 @@ func main() {
 		runSend()
 	case "relay":
 		runRelayServer()
+	case "identity":
+		runIdentity()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -388,7 +390,48 @@ func printUsage() {
 	fmt.Println("  zdns peers [list|rm|rename|sync]   Manage trusted peers")
 	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
 	fmt.Println("  zdns history                       Show encrypted event history")
+	fmt.Println("  zdns identity [export|import]      Backup or restore your identity")
 	fmt.Println("  zdns relay                         Start a standalone signaling server")
+}
+
+func runIdentity() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: zdns identity [export|import <hex>]")
+		return
+	}
+
+	storage, _ := getStorage()
+	path := filepath.Join(storage.ConfigDir, "identity.json")
+
+	switch os.Args[2] {
+	case "export":
+		id, err := getIdentity(storage)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("--- zDNS Identity Backup ---")
+		fmt.Println("Your Paper-Key (Private Key):")
+		fmt.Printf("\n%s\n\n", zdns.ExportKey(id.Private))
+		fmt.Println("KEEP THIS SECRET. Anyone with this key can impersonate your device.")
+		fmt.Println("-----------------------------")
+	case "import":
+		if len(os.Args) < 4 {
+			log.Fatal("Usage: zdns identity import <hex_key>")
+		}
+		priv, err := zdns.ImportKey(os.Args[3])
+		if err != nil {
+			log.Fatalf("Invalid key: %v", err)
+		}
+		pub := zdns.ReconstitutePublic(priv)
+		id := &Identity{
+			Name:    getHostname(),
+			Private: priv,
+			Public:  pub,
+		}
+		data, _ := json.Marshal(id)
+		os.WriteFile(path, data, 0600)
+		fmt.Println("Successfully imported identity. Restart the daemon to apply.")
+	}
 }
 
 func runRelayServer() {
@@ -789,8 +832,12 @@ func runAdvertiseWithTags(tags string) {
 	for {
 		battery := info.GetBatteryLevel()
 		state := info.GetDeviceState()
+		
+		// Pulse: Health Check
+		liveTags := sysinfo.ProbeTags(tags)
+
 		for _, peer := range peers {
-			broadcaster.Broadcast(peer, state, battery, tags, "")
+			broadcaster.Broadcast(peer, state, battery, liveTags, "")
 		}
 
 		// Randomized sleep (7-14s)
@@ -1059,9 +1106,12 @@ func runAdvertise() {
 	for {
 		battery := info.GetBatteryLevel()
 		state := info.GetDeviceState()
+		
+		// Pulse: Health Check
+		liveTags := sysinfo.ProbeTags(*tags)
 
 		for _, peer := range peers {
-			err := broadcaster.Broadcast(peer, state, battery, *tags, "")
+			err := broadcaster.Broadcast(peer, state, battery, liveTags, "")
 			if err != nil {
 				log.Printf("Broadcast error: %v", err)
 			}
