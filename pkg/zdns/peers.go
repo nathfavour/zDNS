@@ -61,3 +61,14 @@ func (s *PeerStore) GetPeerByID(id [16]byte) (*Peer, bool) {
 	p, ok := s.peers[id]
 	return p, ok
 }
+
+func (s *PeerStore) GetPeerByPublicKey(pub [32]byte) (*Peer, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, p := range s.all {
+		if p.PublicKey == pub {
+			return p, true
+		}
+	}
+	return nil, false
+}

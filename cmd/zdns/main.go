@@ -442,14 +442,15 @@ func runDaemon() {
 		ticker := time.NewTicker(30 * time.Second)
 		for range ticker.C {
 			livePeersMu.RLock()
-			for _, p := range livePeers {
-				// Find peer in store to get shared secret
-				peer, ok := store.GetPeerByID(zdns.GenerateServiceID([]byte{}, time.Now())) // This is wrong, need to find by name or pubkey
-				// Let's use a simpler way: the peerStore should allow lookup by name
-				_ = p
-				_ = broadcaster
-				_ = peer
-				_ = ok
+			for pubKeyArr, p := range livePeers {
+				peer, ok := store.GetPeerByPublicKey(pubKeyArr)
+				if ok {
+					blob := &zdns.StateBlob{
+						Type:      zdns.TypePing,
+						Timestamp: time.Now().Unix(),
+					}
+					broadcaster.SendTo(peer, p.IP+":5354", blob)
+				}
 			}
 			livePeersMu.RUnlock()
 		}

@@ -30,6 +30,7 @@ func NewModel(socketPath string) model {
 		{Title: "Battery", Width: 10},
 		{Title: "State", Width: 10},
 		{Title: "Services", Width: 20},
+		{Title: "Latency", Width: 10},
 		{Title: "ID", Width: 10},
 		{Title: "Last Seen", Width: 15},
 	}
@@ -116,11 +117,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			lastSeen := time.Since(time.Unix(p.LastSeen, 0)).Round(time.Second).String() + " ago"
 
+			latency := "???"
+			if p.Latency > 0 {
+				latency = fmt.Sprintf("%dms", p.Latency)
+			}
+
 			rows = append(rows, table.Row{
 				p.Name,
 				batStr,
 				stateIcon + " " + p.State,
 				p.Tags,
+				latency,
 				p.PublicKey,
 				lastSeen,
 			})
