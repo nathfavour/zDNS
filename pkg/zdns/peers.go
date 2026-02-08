@@ -72,3 +72,17 @@ func (s *PeerStore) GetPeerByPublicKey(pub [32]byte) (*Peer, bool) {
 	}
 	return nil, false
 }
+
+func (s *PeerStore) ExportMetadata() []Peer {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Peer, len(s.all))
+	for i, p := range s.all {
+		out[i] = Peer{
+			Name:      p.Name,
+			PublicKey: p.PublicKey,
+			ExpiresAt: p.ExpiresAt,
+		}
+	}
+	return out
+}

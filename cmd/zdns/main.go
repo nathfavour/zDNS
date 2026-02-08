@@ -361,6 +361,8 @@ func main() {
 		runProxy()
 	case "send":
 		runSend()
+	case "relay":
+		runRelayServer()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -376,15 +378,53 @@ func printUsage() {
 	fmt.Println("  zdns join --invite INVITE_CODE     Join a peer using an invite code")
 	fmt.Println("  zdns listen                        Listen for trusted peers")
 	fmt.Println("  zdns advertise                     Advertise current state")
-	fmt.Println("  zdns daemon                        Run both listener and advertiser")
+	fmt.Println("  zdns daemon [--relay URL]          Run both listener and advertiser")
 	fmt.Println("  zdns status                        Show status of discovered peers")
 	fmt.Println("  zdns dash                          Show real-time TUI dashboard")
 	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service")
 	fmt.Println("  zdns proxy <peer> <lport>:<rport>  Proxy a local port to a remote service")
 	fmt.Println("  zdns send <peer> <file_path>       Send an encrypted file to a peer")
-	fmt.Println("  zdns peers [list|rm|rename]        Manage trusted peers")
+	fmt.Println("  zdns peers [list|rm|rename|sync]   Manage trusted peers")
 	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
 	fmt.Println("  zdns history                       Show encrypted event history")
+	fmt.Println("  zdns relay                         Start a standalone signaling server")
+}
+
+func runRelayServer() {
+	fs := flag.NewFlagSet("relay", flag.ExitOnError)
+	port := fs.String("port", "8080", "Port to listen on")
+	fs.Parse(os.Args[2:])
+
+	// In-memory store for check-ins (IDHash -> RelayCheckIn)
+	store := make(map[string]zdns.RelayCheckIn)
+	var mu sync.RWMutex
+
+	http.HandleFunc("/checkin", func(w http.ResponseWriter, r *http.Request) {
+		var c zdns.RelayCheckIn
+		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		mu.Lock()
+		store[fmt.Sprintf("%x", c.IDHash)] = c
+		mu.Unlock()
+		w.WriteHeader(200)
+	})
+
+	http.HandleFunc("/lookup/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/lookup/")
+		mu.RLock()
+		c, ok := store[id]
+		mu.RUnlock()
+		if !ok {
+			http.Error(w, "Not Found", 404)
+			return
+		}
+		json.NewEncoder(w).Encode(c)
+	})
+
+	fmt.Printf("zDNS Signaling Relay starting on :%s...\n", *port)
+	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }
 
 func runProxy() {
@@ -536,18 +576,70 @@ func runPeers() {
 			newPeers = append(newPeers, p)
 		}
 		storage.SavePeers(newPeers)
-	case "rename":
-		if len(os.Args) < 5 {
-			log.Fatal("Usage: zdns peers rename <old> <new>")
+	case "sync":
+		if len(os.Args) < 4 {
+			log.Fatal("Usage: zdns peers sync <peer_name>")
 		}
-		oldName, newName := os.Args[3], os.Args[4]
+		targetName := os.Args[3]
+		
+		// 1. Start a temporary TCP listener to receive the peer list
+		l, err := net.Listen("tcp", "0.0.0.0:0")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer l.Close()
+		_, port, _ := net.SplitHostPort(l.Addr().String())
+
+		// 2. Resolve target peer
+		var targetPeer *zdns.Peer
 		for _, p := range peers {
-			if p.Name == oldName {
-				p.Name = newName
-				fmt.Printf("Renamed %s to %s\n", oldName, newName)
+			if p.Name == targetName {
+				targetPeer = p
+				break
 			}
 		}
-		storage.SavePeers(peers)
+		if targetPeer == nil {
+			log.Fatalf("Peer '%s' not found", targetName)
+		}
+
+		// 3. Send sync request: sync_req:port
+		broadcaster, _ := zdns.NewBroadcaster()
+		fmt.Printf("Requesting peer sync from %s...\n", targetName)
+		broadcaster.Broadcast(targetPeer, zdns.StateUnlocked, 100, "", "sync_req:"+port)
+
+		// 4. Accept connection and receive JSON
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer conn.Close()
+
+		var syncedPeers []zdns.Peer
+		if err := json.NewDecoder(conn).Decode(&syncedPeers); err != nil {
+			log.Fatalf("Failed to decode synced peers: %v", err)
+		}
+
+		// 5. Merge new peers (Metadata only, they will need pairing for secrets)
+		added := 0
+		existingMap := make(map[[32]byte]bool)
+		for _, p := range peers {
+			existingMap[p.PublicKey] = true
+		}
+
+		for _, sp := range syncedPeers {
+			if !existingMap[sp.PublicKey] {
+				peers = append(peers, &sp)
+				added++
+				fmt.Printf("Discovered new peer: %s\n", sp.Name)
+			}
+		}
+		
+		if added > 0 {
+			storage.SavePeers(peers)
+			fmt.Printf("Sync complete. Added %d new potential peers.\n", added)
+		} else {
+			fmt.Println("Sync complete. No new peers found.")
+		}
 	}
 }
 
@@ -859,6 +951,26 @@ func runListen() {
 						} else {
 							fmt.Printf("\n[DROP SUCCESS] Received %s in %s\n", fileName, dropDir)
 						}
+					}()
+				}
+			} else if strings.HasPrefix(blob.Command, "sync_req:") {
+				// Handle peer metadata sync request
+				parts := strings.Split(blob.Command, ":")
+				if len(parts) >= 2 {
+					port := parts[1]
+					targetAddr := net.JoinHostPort(net.IP(blob.IP[:]).String(), port)
+					historyManager.Log(peer.Name, "SYNC", "Sending peer list")
+					
+					go func() {
+						conn, err := net.DialTimeout("tcp", targetAddr, 5*time.Second)
+						if err != nil {
+							return
+						}
+						defer conn.Close()
+						
+						// Export and send metadata
+						meta := store.ExportMetadata()
+						json.NewEncoder(conn).Encode(meta)
 					}()
 				}
 			} else {
