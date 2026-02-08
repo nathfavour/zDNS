@@ -14,6 +14,7 @@ import (
 
 	"github.com/nathfavour/zdns/pkg/ipc"
 	"github.com/nathfavour/zdns/pkg/sysinfo"
+	"github.com/nathfavour/zdns/pkg/tui"
 	"github.com/nathfavour/zdns/pkg/zdns"
 )
 
@@ -27,6 +28,14 @@ type Identity struct {
 	Name    string   `json:"name"`
 	Private [32]byte `json:"priv"`
 	Public  [32]byte `json:"pub"`
+}
+
+func runDash() {
+	storage, _ := zdns.NewStorage()
+	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
+	if err := tui.Run(socketPath); err != nil {
+		log.Fatalf("TUI Error: %v", err)
+	}
 }
 
 func runStatus() {
@@ -106,6 +115,8 @@ func main() {
 		runDaemon()
 	case "status":
 		runStatus()
+	case "dash":
+		runDash()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -121,6 +132,7 @@ func printUsage() {
 	fmt.Println("  zdns advertise                     Advertise current state")
 	fmt.Println("  zdns daemon                        Run both listener and advertiser")
 	fmt.Println("  zdns status                        Show status of discovered peers")
+	fmt.Println("  zdns dash                          Show real-time TUI dashboard")
 }
 
 func runDaemon() {
