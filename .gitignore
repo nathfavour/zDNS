@@ -1,0 +1,26 @@
+# zDNS Build Artifacts
+build/
+zdns
+
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with Lit
+6.out
+7.out
+8.out
+9.out
+pkg.test
+
+# Common IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
