@@ -81,6 +81,8 @@ func main() {
 		runRelayServer()
 	case "identity":
 		runIdentity()
+	case "managed":
+		runManaged()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -106,6 +108,7 @@ func printUsage() {
 	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
 	fmt.Println("  zdns history                       Show encrypted event history")
 	fmt.Println("  zdns identity [export|import]      Backup or restore your identity")
+	fmt.Println("  zdns managed                       Check Anyisland management status")
 	fmt.Println("  zdns relay                         Start a standalone signaling server")
 }
 

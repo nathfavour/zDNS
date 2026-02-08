@@ -48,3 +48,23 @@ func runStatus() {
 		fmt.Printf("%-15s %-10d %-10s %-20s %-10s %-10s\n", p.Name, p.Battery, p.State, p.Tags, latency, p.PublicKey)
 	}
 }
+
+func runManaged() {
+	fmt.Println("Checking Anyisland management status...")
+	resp, err := zdns.CheckAnyislandStatus()
+	if err != nil {
+		fmt.Printf("Not managed by Anyisland (or Anyisland daemon not running): %v\n", err)
+		return
+	}
+
+	if resp.Status == "MANAGED" {
+		fmt.Println("--- Anyisland Status ---")
+		fmt.Printf("Status:   %s\n", resp.Status)
+		fmt.Printf("Tool ID:  %s\n", resp.ToolID)
+		fmt.Printf("Version:  %s\n", resp.Version)
+		fmt.Printf("AI Host:  %s\n", resp.AnyislandVersion)
+		fmt.Println("------------------------")
+	} else {
+		fmt.Println("Status: UNMANAGED")
+	}
+}
