@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"path/filepath"
 
 	"github.com/nathfavour/zdns/pkg/tui"
-	"github.com/nathfavour/zdns/pkg/zdns"
 )
 
 func runDash() {
