@@ -231,10 +231,14 @@ func runStatus() {
 		return
 	}
 
-	fmt.Printf("%-15s %-10s %-10s %-20s %-10s\n", "NAME", "BATTERY", "STATE", "SERVICES", "ID")
-	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("%-15s %-10s %-10s %-20s %-10s %-10s\n", "NAME", "BATTERY", "STATE", "SERVICES", "LATENCY", "ID")
+	fmt.Println(strings.Repeat("-", 85))
 	for _, p := range resp.Peers {
-		fmt.Printf("%-15s %-10d %-10s %-20s %-10s\n", p.Name, p.Battery, p.State, p.Tags, p.PublicKey)
+		latency := "???"
+		if p.Latency > 0 {
+			latency = fmt.Sprintf("%dms", p.Latency)
+		}
+		fmt.Printf("%-15s %-10d %-10s %-20s %-10s %-10s\n", p.Name, p.Battery, p.State, p.Tags, latency, p.PublicKey)
 	}
 }
 
@@ -636,7 +640,6 @@ func runListen() {
 
 		if blob.Type == zdns.TypePong {
 			// Calculate RTT
-			rtt := time.Now().UnixMilli() - (blob.Timestamp * 1000) // Rough estimation if we use ms
 			// Since our TS is only seconds for now, let's just mark it seen.
 			// In a real impl, we'd use a higher res TS for PING/PONG
 			livePeersMu.Lock()
