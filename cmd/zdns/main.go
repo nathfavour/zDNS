@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -62,6 +63,89 @@ import (
 	Name    string   `json:"name"`
 	Private [32]byte `json:"priv"`
 	Public  [32]byte `json:"pub"`
+}
+
+func runConnect() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: zdns connect <peer_name> <service_tag>")
+		return
+	}
+	targetPeer := os.Args[2]
+	targetTag := os.Args[3]
+
+	storage, _ := getStorage()
+	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
+
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		log.Fatalf("Daemon not running: %v", err)
+	}
+	defer conn.Close()
+
+	json.NewEncoder(conn).Encode(ipc.Request{Command: "list_peers"})
+	var resp ipc.Response
+	json.NewDecoder(conn).Decode(&resp)
+
+	var found *ipc.PeerStatus
+	for _, p := range resp.Peers {
+		if p.Name == targetPeer {
+			found = &p
+			break
+		}
+	}
+
+	if found == nil {
+		log.Fatalf("Peer '%s' not found or offline", targetPeer)
+	}
+
+	// Parse tags for the specific service
+	// Tags format: "ssh:22,http:8080"
+	port := ""
+	tags := strings.Split(found.Tags, ",")
+	for _, t := range tags {
+		parts := strings.Split(t, ":")
+		if parts[0] == targetTag {
+			if len(parts) > 1 {
+				port = parts[1]
+			}
+			break
+		}
+	}
+
+	if port == "" && !strings.Contains(found.Tags, targetTag) {
+		log.Fatalf("Service '%s' not advertised by %s (Tags: %s)", targetTag, targetPeer, found.Tags)
+	}
+
+	// Action!
+	addr := found.IP
+	if port != "" {
+		addr = net.JoinHostPort(addr, port)
+	}
+
+	fmt.Printf("Connecting to %s on %s via %s...\n", targetPeer, addr, targetTag)
+
+	var cmd *exec.Cmd
+	switch targetTag {
+	case "ssh":
+		user := os.Getenv("USER")
+		pArg := "-p"
+		if port == "" {
+			port = "22"
+		}
+		cmd = exec.Command("ssh", fmt.Sprintf("%s@%s", user, found.IP), pArg, port)
+	case "http", "https":
+		cmd = exec.Command("xdg-open", fmt.Sprintf("%s://%s", targetTag, addr))
+	default:
+		fmt.Printf("No default handler for '%s'. Address: %s\n", targetTag, addr)
+		return
+	}
+
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("Command failed: %v", err)
+	}
 }
 
 func runDash() {
@@ -161,6 +245,8 @@ func main() {
 		runStatus()
 	case "dash":
 		runDash()
+	case "connect":
+		runConnect()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -179,6 +265,7 @@ func printUsage() {
 	fmt.Println("  zdns daemon                        Run both listener and advertiser")
 	fmt.Println("  zdns status                        Show status of discovered peers")
 	fmt.Println("  zdns dash                          Show real-time TUI dashboard")
+	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service (e.g. ssh, http)")
 }
 
 func runDaemon() {
@@ -216,6 +303,21 @@ func runDaemon() {
 
 	go ipcServer.Start()
 	fmt.Printf("IPC Server active at: %s\n", ipcServer.SocketPath)
+
+	// Background Task: Cleanup stale peers (not seen for > 15 mins)
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		for range ticker.C {
+			livePeersMu.Lock()
+			now := time.Now().Unix()
+			for pub, p := range livePeers {
+				if now-p.LastSeen > 900 { // 15 minutes
+					delete(livePeers, pub)
+				}
+			}
+			livePeersMu.Unlock()
+		}
+	}()
 
 	// Run advertiser in background
 	go runAdvertiseWithTags(*tags)
@@ -363,6 +465,7 @@ func runListen() {
 		
 		livePeers[peer.PublicKey] = ipc.PeerStatus{
 			Name:      peer.Name,
+			IP:        net.IP(blob.IP[:]).String(),
 			Battery:   blob.BatteryLevel,
 			State:     newState,
 			LastSeen:  time.Now().Unix(),

@@ -166,6 +166,30 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, ta
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
 			continue
 		}
+
+		// Get the first IPv4 address for this interface
+		addrs, _ := iface.Addrs()
+		var ip [16]byte
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+				copy(ip[:], ipnet.IP.To16())
+				break
+			}
+		}
+		blob.IP = ip
+
+		// Re-encrypt because the IP changed per interface
+		ciphertext, nonce, err := EncryptStateBlob(peer.SharedSecret, blob)
+		if err != nil {
+			continue
+		}
+
+		packet := make([]byte, 16+12+len(ciphertext)+paddingLen)
+		copy(packet[0:16], serviceID[:])
+		copy(packet[16:28], nonce[:])
+		copy(packet[28 : 28+len(ciphertext)], ciphertext)
+		copy(packet[28+len(ciphertext):], padding[:paddingLen])
+
 		// Set the interface for this broadcast
 		b.pc.SetMulticastInterface(&iface)
 		b.pc.WriteTo(packet, nil, b.addr)

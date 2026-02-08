@@ -20,6 +20,7 @@ type Response struct {
 
 type PeerStatus struct {
 	Name         string `json:"name"`
+	IP           string `json:"ip"`
 	Battery      uint8  `json:"battery"`
 	State        string `json:"state"`
 	LastSeen     int64  `json:"last_seen"`
