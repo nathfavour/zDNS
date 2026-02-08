@@ -207,6 +207,55 @@ func runDash() {
 	}
 }
 
+func runSend() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: zdns send <peer_name> <file_path>")
+		return
+	}
+	targetName := os.Args[2]
+	filePath := os.Args[3]
+
+	storage, _ := getStorage()
+	peers, _ := storage.LoadPeers()
+	var targetPeer *zdns.Peer
+	for _, p := range peers {
+		if p.Name == targetName {
+			targetPeer = p
+			break
+		}
+	}
+
+	if targetPeer == nil {
+		log.Fatalf("Peer '%s' not found", targetName)
+	}
+
+	// Start a local listener for the file transfer
+	l, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		log.Fatalf("Failed to start file server: %v", err)
+	}
+	defer l.Close()
+
+	_, port, _ := net.SplitHostPort(l.Addr().String())
+	fileName := filepath.Base(filePath)
+
+	broadcaster, _ := zdns.NewBroadcaster()
+	
+	// Signal the peer: drop:<port>:<filename>
+	dropCmd := fmt.Sprintf("drop:%s:%s", port, fileName)
+	fmt.Printf("Signaling %s to receive '%s' on port %s...\n", targetName, fileName, port)
+	
+	err = broadcaster.Broadcast(targetPeer, zdns.StateUnlocked, 100, "", dropCmd)
+	if err != nil {
+		log.Fatalf("Failed to signal peer: %v", err)
+	}
+
+	// Serve the file
+	if err := zdns.SendFile(filePath, targetPeer, l); err != nil {
+		log.Fatalf("File transfer failed: %v", err)
+	}
+}
+
 func runStatus() {
 	storage, _ := getStorage()
 	socketPath := filepath.Join(storage.ConfigDir, "zdns", "zdns.sock")
@@ -310,6 +359,8 @@ func main() {
 		runHistory()
 	case "proxy":
 		runProxy()
+	case "send":
+		runSend()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -330,6 +381,7 @@ func printUsage() {
 	fmt.Println("  zdns dash                          Show real-time TUI dashboard")
 	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service")
 	fmt.Println("  zdns proxy <peer> <lport>:<rport>  Proxy a local port to a remote service")
+	fmt.Println("  zdns send <peer> <file_path>       Send an encrypted file to a peer")
 	fmt.Println("  zdns peers [list|rm|rename]        Manage trusted peers")
 	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
 	fmt.Println("  zdns history                       Show encrypted event history")
@@ -791,8 +843,28 @@ func runListen() {
 
 		// Remote Command Execution
 		if blob.Command != "" {
-			historyManager.Log(peer.Name, "EXEC", blob.Command)
-			go cmdExecutor.Execute(blob.Command)
+			if strings.HasPrefix(blob.Command, "drop:") {
+				// Handle file drop: drop:port:filename
+				parts := strings.Split(blob.Command, ":")
+				if len(parts) >= 3 {
+					port, fileName := parts[1], parts[2]
+					senderAddr := net.JoinHostPort(net.IP(blob.IP[:]).String(), port)
+					dropDir := filepath.Join(storage.ConfigDir, "drops")
+					os.MkdirAll(dropDir, 0700)
+					
+					historyManager.Log(peer.Name, "DROP", "Receiving file: "+fileName)
+					go func() {
+						if err := zdns.ReceiveFile(senderAddr, peer, fileName, dropDir); err != nil {
+							fmt.Printf("\n[DROP ERROR] Failed to receive %s: %v\n", fileName, err)
+						} else {
+							fmt.Printf("\n[DROP SUCCESS] Received %s in %s\n", fileName, dropDir)
+						}
+					}()
+				}
+			} else {
+				historyManager.Log(peer.Name, "EXEC", blob.Command)
+				go cmdExecutor.Execute(blob.Command)
+			}
 		}
 
 		fmt.Printf("[%s] %s - Battery: %d%% - %s\n",
