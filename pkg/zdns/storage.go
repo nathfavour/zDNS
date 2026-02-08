@@ -49,6 +49,10 @@ func (s *Storage) GetPeersPath() string {
 	return filepath.Join(s.ConfigDir, "peers.json")
 }
 
+func (s *Storage) GetVault() *Vault {
+	return s.vault
+}
+
 // SavePeers serializes the peers metadata and their secrets separately.
 func (s *Storage) SavePeers(peers []*Peer) error {
 	// 1. Save Secrets via SecretStore

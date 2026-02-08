@@ -26,6 +26,7 @@ type PeerStatus struct {
 	LastSeen     int64  `json:"last_seen"`
 	PublicKey    string `json:"public_key"`
 	Tags         string `json:"tags"`
+	Latency      int64  `json:"latency_ms"`
 }
 
 type Server struct {

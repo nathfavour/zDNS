@@ -82,8 +82,8 @@ func (l *Listener) Listen(handler func(peer *Peer, blob *StateBlob)) error {
 		var nonce [12]byte
 		copy(nonce[:], buf[16:28])
 		
-		// The ciphertext is always exactly 204 bytes for our StateBlob (188 bytes + 16 tag)
-		const ciphertextLen = 204
+		// The ciphertext is always exactly 205 bytes for our StateBlob (189 bytes + 16 tag)
+		const ciphertextLen = 205
 		if n < 16+12+ciphertextLen {
 			continue
 		}
@@ -137,6 +137,7 @@ func NewBroadcaster() (*Broadcaster, error) {
 
 func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, tags, command string) error {
 	blob := &StateBlob{
+		Type:         TypeStatus,
 		DeviceID:     peer.PublicKey,
 		DeviceState:  state,
 		BatteryLevel: battery,
@@ -192,14 +193,37 @@ func (b *Broadcaster) Broadcast(peer *Peer, state DeviceState, battery uint8, ta
 	return nil
 }
 
+// SendTo sends a directed packet to a specific peer.
+func (b *Broadcaster) SendTo(peer *Peer, addr string, blob *StateBlob) error {
+	udpAddr, err := net.ResolveUDPAddr("udp4", addr)
+	if err != nil {
+		return err
+	}
+
+	ciphertext, nonce, err := EncryptStateBlob(peer.SharedSecret, blob)
+	if err != nil {
+		return err
+	}
+
+	serviceID := GenerateServiceID(peer.SharedSecret, time.Now())
+	
+	packet := make([]byte, 16+12+len(ciphertext))
+	copy(packet[0:16], serviceID[:])
+	copy(packet[16:28], nonce[:])
+	copy(packet[28:], ciphertext)
+
+	_, err = b.pc.WriteTo(packet, nil, udpAddr)
+	return err
+}
+
 // BroadcastChaff sends a random noise packet to confuse traffic analysis.
 func (b *Broadcaster) BroadcastChaff() error {
-	// Match the size of a standard packet: 16 + 12 + 204 + (0-31 padding)
+	// Match the size of a standard packet: 16 + 12 + 205 + (0-31 padding)
 	var p [1]byte
 	rand.Read(p[:])
 	paddingLen := int(p[0] % 32)
 
-	data := make([]byte, 16+12+204+paddingLen)
+	data := make([]byte, 16+12+205+paddingLen)
 	if _, err := rand.Read(data); err != nil {
 		return err
 	}

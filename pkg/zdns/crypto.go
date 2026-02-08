@@ -45,30 +45,32 @@ func EncryptStateBlob(key []byte, blob *StateBlob) ([]byte, [12]byte, error) {
 
 	// Simple manual serialization for speed/control
 	// Base: 60 bytes
+	// Type: 1 byte
 	// Tags: 64 bytes
 	// Cmd:  64 bytes
-	// Total: 188 bytes
-	data := make([]byte, 188)
-	copy(data[0:32], blob.DeviceID[:])
-	copy(data[32:48], blob.IP[:])
-	binary.BigEndian.PutUint16(data[48:50], blob.Port)
-	data[50] = byte(blob.DeviceState)
-	data[51] = blob.BatteryLevel
-	binary.BigEndian.PutUint64(data[52:60], uint64(blob.Timestamp))
+	// Total: 189 bytes
+	data := make([]byte, 189)
+	data[0] = byte(blob.Type)
+	copy(data[1:33], blob.DeviceID[:])
+	copy(data[33:49], blob.IP[:])
+	binary.BigEndian.PutUint16(data[49:51], blob.Port)
+	data[51] = byte(blob.DeviceState)
+	data[52] = blob.BatteryLevel
+	binary.BigEndian.PutUint64(data[53:61], uint64(blob.Timestamp))
 	
 	// Copy tags (max 64 bytes)
 	tagBytes := []byte(blob.Tags)
 	if len(tagBytes) > 64 {
 		tagBytes = tagBytes[:64]
 	}
-	copy(data[60:124], tagBytes)
+	copy(data[61:125], tagBytes)
 
 	// Copy command (max 64 bytes)
 	cmdBytes := []byte(blob.Command)
 	if len(cmdBytes) > 64 {
 		cmdBytes = cmdBytes[:64]
 	}
-	copy(data[124:188], cmdBytes)
+	copy(data[125:189], cmdBytes)
 
 	ciphertext := aead.Seal(nil, nonce[:], data, nil)
 	return ciphertext, nonce, nil
@@ -86,24 +88,25 @@ func DecryptStateBlob(key []byte, nonce [12]byte, ciphertext []byte) (*StateBlob
 		return nil, ErrDecryptionFailed
 	}
 
-	if len(plaintext) < 188 {
+	if len(plaintext) < 189 {
 		return nil, ErrInvalidPacket
 	}
 
 	blob := &StateBlob{}
-	copy(blob.DeviceID[:], plaintext[0:32])
-	copy(blob.IP[:], plaintext[32:48])
-	blob.Port = binary.BigEndian.Uint16(plaintext[48:50])
-	blob.DeviceState = DeviceState(plaintext[50])
-	blob.BatteryLevel = plaintext[51]
-	blob.Timestamp = int64(binary.BigEndian.Uint64(plaintext[52:60]))
+	blob.Type = PacketType(plaintext[0])
+	copy(blob.DeviceID[:], plaintext[1:33])
+	copy(blob.IP[:], plaintext[33:49])
+	blob.Port = binary.BigEndian.Uint16(plaintext[49:51])
+	blob.DeviceState = DeviceState(plaintext[51])
+	blob.BatteryLevel = plaintext[52]
+	blob.Timestamp = int64(binary.BigEndian.Uint64(plaintext[53:61]))
 	
 	// Extract tags and trim null bytes
-	tags := string(plaintext[60:124])
+	tags := string(plaintext[61:125])
 	blob.Tags = strings.TrimRight(tags, "\x00")
 
 	// Extract command and trim null bytes
-	cmd := string(plaintext[124:188])
+	cmd := string(plaintext[125:189])
 	blob.Command = strings.TrimRight(cmd, "\x00")
 
 	return blob, nil

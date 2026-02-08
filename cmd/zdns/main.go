@@ -42,6 +42,8 @@ import (
 
 			cmdExecutor   *commands.Executor
 
+			historyManager *zdns.HistoryManager
+
 			masterPass    string
 
 		)
@@ -297,6 +299,8 @@ func main() {
 		runPeers()
 	case "exec":
 		runExec()
+	case "history":
+		runHistory()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -318,6 +322,7 @@ func printUsage() {
 	fmt.Println("  zdns connect <peer> <service>      Connect to a discovered service")
 	fmt.Println("  zdns peers [list|rm|rename]        Manage trusted peers")
 	fmt.Println("  zdns exec <peer> <command>         Execute a remote safe command")
+	fmt.Println("  zdns history                       Show encrypted event history")
 }
 
 func runPeers() {
@@ -539,6 +544,7 @@ func runListen() {
 	// Initialize triggers
 	triggerEngine, _ = triggers.NewEngine(storage.ConfigDir)
 	cmdExecutor, _ = commands.NewExecutor(storage.ConfigDir)
+	historyManager, _ = zdns.NewHistoryManager(storage.ConfigDir, storage.GetVault())
 
 	store := zdns.NewPeerStore()
 	peers, err := storage.LoadPeers()
@@ -569,8 +575,34 @@ func runListen() {
 		log.Fatal(err)
 	}
 
+	broadcaster, _ := zdns.NewBroadcaster()
+
 	fmt.Println("zDNS Listener Active. Waiting for trusted peers...")
 	err = listener.Listen(func(peer *zdns.Peer, blob *zdns.StateBlob) {
+		peerAddr := net.IP(blob.IP[:]).String() + ":5354"
+		
+		if blob.Type == zdns.TypePing {
+			// Respond with PONG
+			resp := *blob
+			resp.Type = zdns.TypePong
+			broadcaster.SendTo(peer, peerAddr, &resp)
+			return
+		}
+
+		if blob.Type == zdns.TypePong {
+			// Calculate RTT
+			rtt := time.Now().UnixMilli() - (blob.Timestamp * 1000) // Rough estimation if we use ms
+			// Since our TS is only seconds for now, let's just mark it seen.
+			// In a real impl, we'd use a higher res TS for PING/PONG
+			livePeersMu.Lock()
+			if p, ok := livePeers[peer.PublicKey]; ok {
+				p.Latency = time.Now().UnixMilli() - (blob.Timestamp * 1000)
+				livePeers[peer.PublicKey] = p
+			}
+			livePeersMu.Unlock()
+			return
+		}
+
 		newState := blob.DeviceState.String()
 
 		livePeersMu.Lock()
@@ -584,11 +616,17 @@ func runListen() {
 			LastSeen:  time.Now().Unix(),
 			PublicKey: fmt.Sprintf("%x", peer.PublicKey[:4]),
 			Tags:      blob.Tags,
+			Latency:   oldStatus.Latency,
 		}
 		livePeersMu.Unlock()
 
+		if !exists {
+			historyManager.Log(peer.Name, "JOIN", "Device appeared on network")
+		}
+
 		// Trigger Check: Only if state actually changed
 		if exists && oldStatus.State != newState {
+			historyManager.Log(peer.Name, "STATE", fmt.Sprintf("%s -> %s", oldStatus.State, newState))
 			env := map[string]string{
 				"ZDNS_PEER_NAME": peer.Name,
 				"ZDNS_PEER_BAT":  fmt.Sprintf("%d", blob.BatteryLevel),
@@ -599,6 +637,7 @@ func runListen() {
 
 		// Remote Command Execution
 		if blob.Command != "" {
+			historyManager.Log(peer.Name, "EXEC", blob.Command)
 			go cmdExecutor.Execute(blob.Command)
 		}
 
